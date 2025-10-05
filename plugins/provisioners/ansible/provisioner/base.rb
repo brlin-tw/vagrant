@@ -4,6 +4,7 @@
 require_relative "../constants"
 require_relative "../errors"
 require_relative "../helpers"
+require "shellwords"
 
 module VagrantPlugins
   module Ansible
@@ -140,8 +141,16 @@ module VagrantPlugins
               shell_args << %Q(#{$1}="#{$2}")
             elsif arg =~ /(--extra-vars)=(.+)/
               shell_args << %Q(%s=%s) % [$1, $2.shellescape]
+            elsif arg =~ /(.+?)=(.+)/
+              # For option=value style args, shell-escape the value part so
+              # paths containing spaces are handled correctly when the
+              # command is produced as a shell string.
+              left = $1
+              right = $2
+              shell_args << %Q(#{left}=#{right.shellescape})
             else
-              shell_args << arg
+              # Shell-escape any remaining args to be safe.
+              shell_args << arg.shellescape
             end
           end
 
