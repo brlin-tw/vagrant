@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require 'ipaddr'
 require 'log4r'
 
@@ -171,8 +174,8 @@ module VagrantPlugins
               raise Errors::NetworkNoInterfaces
             elsif valid_interfaces.size == 1
               bridge_interface = valid_interfaces.first
-            elsif i = valid_interfaces.detect{|i| Array(root_options[:bridge]).include?(i.name) }
-              bridge_interface = i
+            elsif idx = valid_interfaces.detect{|i| Array(root_options[:bridge]).include?(i.name) }
+              bridge_interface = idx
             end
             if !bridge_interface
               env[:ui].info(I18n.t("vagrant.actions.vm.bridged_networking.available"),

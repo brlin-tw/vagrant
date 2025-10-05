@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require File.expand_path("../../../../base", __FILE__)
 
 describe Vagrant::Action::Builtin::CleanupDisks do
@@ -11,7 +14,7 @@ describe Vagrant::Action::Builtin::CleanupDisks do
 
   let(:disks) { [double("disk")] }
 
-  let(:ui)  { double("ui") }
+  let(:ui)  { Vagrant::UI::Silent.new }
 
   let(:disk_meta_file) { {disk: [{uuid: "123456789", name: "storage"}], floppy: [], dvd: []} }
 

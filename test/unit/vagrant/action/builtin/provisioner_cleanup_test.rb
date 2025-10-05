@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "pathname"
 require "tmpdir"
 
@@ -20,12 +23,7 @@ describe Vagrant::Action::Builtin::ProvisionerCleanup do
   end
 
   let(:vm_config) { double("machine_vm_config") }
-
-  let(:ui) do
-    double("ui").tap do |result|
-      allow(result).to receive(:info)
-    end
-  end
+  let(:ui) { Vagrant::UI::Silent.new }
 
   let(:provisioner) do
     Class.new(Vagrant.plugin("2", :provisioner))

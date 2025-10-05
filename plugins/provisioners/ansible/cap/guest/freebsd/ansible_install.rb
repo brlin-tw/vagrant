@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require_relative "../../../errors"
 
 module VagrantPlugins
@@ -11,7 +14,7 @@ module VagrantPlugins
               if install_mode != :default
                 raise Ansible::Errors::AnsiblePipInstallIsNotSupported
               else
-                machine.communicate.sudo "pkg install -qy py36-ansible"
+                machine.communicate.sudo "pkg install -qy py37-ansible"
               end
             end
 

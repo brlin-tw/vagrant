@@ -17,7 +17,8 @@ between Windows, Mac OS X, and Linux.
 
 ## Quick Start
 
-Package dependencies: Vagrant requires `bsdtar` to be available on your system PATH to run successfully.
+Package dependencies: Vagrant requires `bsdtar` and `curl` to be available on
+your system PATH to run successfully.
 
 For the quick-start, we'll bring up a development machine on
 [VirtualBox](https://www.virtualbox.org/) because it is free and works
@@ -45,11 +46,11 @@ To learn how to build a fully functional development environment, follow the
 
 ## Installing from Source
 
-If you want the bleeding edge version of Vagrant, we try to keep master pretty stable
+If you want the bleeding edge version of Vagrant, we try to keep main pretty stable
 and you're welcome to give it a shot. Please review the installation page [here](https://www.vagrantup.com/docs/installation/source).
 
 ## Contributing to Vagrant
 
-Please take time to read the [HashiCorp Community Guidelines](https://www.hashicorp.com/community-guidelines) and the [Vagrant Contributing Guide](https://github.com/hashicorp/vagrant/blob/master/.github/CONTRIBUTING.md).
+Please take time to read the [HashiCorp Community Guidelines](https://www.hashicorp.com/community-guidelines) and the [Vagrant Contributing Guide](https://github.com/hashicorp/vagrant/blob/main/.github/CONTRIBUTING.md).
 
 Then you're good to go!

@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require File.expand_path("../../../../base", __FILE__)
 require Vagrant.source_root.join("plugins/kernel_v2/config/vm")
 
@@ -33,7 +36,7 @@ describe Vagrant::Action::Builtin::MixinProvisioners do
 
   let(:provisioner_instances) { [provisioner_one,provisioner_two,provisioner_three] }
 
-  let(:ui) { double("ui") }
+  let(:ui) { Vagrant::UI::Silent.new }
   let(:vm) { double("vm", provisioners: provisioner_instances) }
   let(:config) { double("config", vm: vm) }
   let(:machine) { double("machine", ui: ui, config: config) }

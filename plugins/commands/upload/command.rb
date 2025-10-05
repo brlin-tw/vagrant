@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require 'optparse'
 require "rubygems/package"
 
@@ -52,7 +55,7 @@ module VagrantPlugins
         end
 
         # NOTE: We do this to handle paths on Windows like: "..\space dir\"
-        # because the final separater acts to escape the quote and ends up
+        # because the final separator acts to escape the quote and ends up
         # in the source value.
         source = source.sub(/["']$/, "")
         destination ||= File.basename(source)

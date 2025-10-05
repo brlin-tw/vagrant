@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "socket"
 
 module Vagrant
@@ -17,7 +20,7 @@ module Vagrant
           Socket.tcp(host, port, connect_timeout: 0.1).close
           true
         rescue Errno::ETIMEDOUT, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, \
-            Errno::ENETUNREACH, Errno::EACCES, Errno::ENOTCONN
+            Errno::ENETUNREACH, Errno::EACCES, Errno::ENOTCONN, Errno::EALREADY
           false
         end
       end

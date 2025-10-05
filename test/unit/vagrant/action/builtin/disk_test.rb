@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require File.expand_path("../../../../base", __FILE__)
 
 describe Vagrant::Action::Builtin::Disk do
@@ -11,7 +14,7 @@ describe Vagrant::Action::Builtin::Disk do
 
   let(:disks) { [double("disk")] }
 
-  let(:ui)  { double("ui") }
+  let(:ui)  { Vagrant::UI::Silent.new }
 
   let(:disk_data) { {disk: [{uuid: "123456789", name: "storage"}], floppy: [], dvd: []} }
 
@@ -31,14 +34,14 @@ describe Vagrant::Action::Builtin::Disk do
       subject.call(env)
     end
 
-    it "continues on if no disk config present" do
+    it "writes a disk_meta file if no disk config is present" do
       allow(vm).to receive(:disks).and_return([])
       subject = described_class.new(app, env)
 
       expect(app).to receive(:call).with(env).ordered
       expect(machine.provider).not_to receive(:capability).with(:configure_disks, disks)
 
-      expect(subject).not_to receive(:write_disk_metadata)
+      expect(subject).to receive(:write_disk_metadata)
 
       subject.call(env)
     end
@@ -47,6 +50,7 @@ describe Vagrant::Action::Builtin::Disk do
       allow(vm).to receive(:disks).and_return(disks)
       allow(machine.provider).to receive(:capability?).with(:configure_disks).and_return(false)
       subject = described_class.new(app, env)
+      allow(subject).to receive(:write_disk_metadata)
 
       expect(app).to receive(:call).with(env).ordered
       expect(machine.provider).not_to receive(:capability).with(:configure_disks, disks)

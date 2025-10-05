@@ -1,5 +1,7 @@
-require "log4r"
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
 
+require "log4r"
 require "vagrant/plugin/v1/errors"
 
 module Vagrant
@@ -14,6 +16,10 @@ module Vagrant
       autoload :Plugin, "vagrant/plugin/v1/plugin"
       autoload :Provider, "vagrant/plugin/v1/provider"
       autoload :Provisioner, "vagrant/plugin/v1/provisioner"
+
+      # Errors
+      autoload :Error, "vagrant/plugin/v1/error"
+      autoload :InvalidCommandName, "vagrant/plugin/v1/error"
     end
   end
 end

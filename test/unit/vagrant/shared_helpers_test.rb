@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require File.expand_path("../../base", __FILE__)
 
 require "vagrant/shared_helpers"
@@ -141,6 +144,24 @@ describe Vagrant do
     it "should return false when Vagrant version is release" do
       stub_const("Vagrant::VERSION", "1.0.0")
       expect(subject.prerelease?).to be(false)
+    end
+  end
+
+  describe ".allow_prerelease_dependencies?" do
+    context "with environment variable set" do
+      before { allow(ENV).to receive(:[]).with("VAGRANT_ALLOW_PRERELEASE").and_return("1") }
+
+      it "should return true" do
+        expect(subject.allow_prerelease_dependencies?).to be(true)
+      end
+    end
+
+    context "with environment variable unset" do
+      before { allow(ENV).to receive(:[]).with("VAGRANT_ALLOW_PRERELEASE").and_return(nil) }
+
+      it "should return false" do
+        expect(subject.allow_prerelease_dependencies?).to be(false)
+      end
     end
   end
 

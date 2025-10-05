@@ -12,7 +12,7 @@ To ensure that the Vagrant community remains an open and safe space for everyone
 
 ### Reporting an Issue
 
-**Tip:** We have provided a [GitHub issue template](https://github.com/hashicorp/vagrant/blob/master/.github/ISSUE_TEMPLATE/bug-report.md). By respecting the proposed format and filling all the relevant sections, you'll strongly help the Vagrant collaborators to handle your request the best possible way.
+**Tip:** We have provided a [GitHub issue template](https://github.com/hashicorp/vagrant/blob/main/.github/ISSUE_TEMPLATE/bug-report.md). By respecting the proposed format and filling all the relevant sections, you'll strongly help the Vagrant collaborators to handle your request the best possible way.
 
 ### Issue Lifecycle
 
@@ -21,6 +21,7 @@ To ensure that the Vagrant community remains an open and safe space for everyone
 3. Unless it is critical, the issue is left for a period of time, giving outside contributors a chance to address the issue. Later, the issue may be assigned to a Vagrant collaborator and planned for a specific release [milestone](https://github.com/hashicorp/vagrant/milestones)
 4. The issue is addressed in a pull request or commit. The issue will be referenced in the commit message so that the code that fixes it is clearly linked.
 5. The issue is closed. Sometimes, valid issues will be closed to keep the issue tracker clean. The issue is still indexed and available for future viewers, or can be re-opened if necessary.
+6. The issue is locked. After about 30 days the issue will be locked. This is done to keep issue activity in open issues and encourge users to open a new issue if an old issue is being encountered again.
 
 ## Pull Requests
 
@@ -32,7 +33,13 @@ No pull request template is provided on GitHub. The expected changes are often a
 
 **Tip:** Make it small! A focused PR gives you the best chance of having it accepted. Then, repeat if you have more to propose!
 
+### Vagrant Go
+
+The Vagrant port to Go is currently in an alpha state and under heavy development. Please refer to [this issue](https://github.com/hashicorp/vagrant/issues/12819) before starting or submitting pull requests related to Vagrant Go.
+
 ### Setup a development installation of Vagrant
+
+*A Vagrantfile is provided that should take care setting up a VM for running the rspec tests.* If you only need to run those tests and don't also want to run a development version of Vagrant from a host machine then it's recommended to use that.
 
 There are a few prerequisites for setting up a development environment with Vagrant. Ensure you have the following installed on your machine:
 
@@ -48,7 +55,7 @@ It's nice to have a way to control what version of ruby is installed, so you may
 Clone Vagrant's repository from GitHub into the directory where you keep code on your machine:
 
 ```
-  $ git clone https://github.com/hashicorp/vagrant.git
+  $ git clone --recurse-submodules https://github.com/hashicorp/vagrant.git
 ```
 
 Next, move into the newly created `./vagrant` directory.
@@ -63,16 +70,32 @@ All commands will be run from this path. Now, run the `bundle` command to instal
   $ bundle install
 ```
 
-You can now run Vagrant by running `bundle exec vagrant` from inside that directory.    
+You can now run Vagrant by running `bundle exec vagrant` from inside that directory.
+
+##### Setting up Vagrant-go
+
+Add the generated `binstubs` to your `PATH`
+```
+  $ export PATH=/path/to/my/vagrant/binstubs
+```
+
+Install go using the method of your choice.
+
+Build the Vagrant go binary using `make`
+```
+  $ make
+```
+
+This will generate a `./vagrant` binary in your project root.
 
 ### How to prepare your pull request
 
 Once you're confident that your upcoming changes will be accepted:
 
 * In your forked repository, create a topic branch for your upcoming patch.
-  * Usually this is based on the master branch.
-  * Checkout a new branch based on master; `git checkout -b my-contrib master`
-    Please avoid working directly on the `master` branch.
+  * Usually this is based on the main branch.
+  * Checkout a new branch based on main; `git checkout -b my-contrib main`
+    Please avoid working directly on the `main` branch.
 * Make focused commits of logical units and describe them properly.
 * Avoid re-formatting of the existing code.
 * Check for unnecessary whitespace with `git diff --check` before committing.
@@ -125,7 +148,7 @@ $ rake acceptance:run COMPONENTS="cli"
 ### Submit Changes
 
 * Push your changes to a topic branch in your fork of the repository.
-* Open a PR to the original repository and choose the right original branch you want to patch (master for most cases).
+* Open a PR to the original repository and choose the right original branch you want to patch (main for most cases).
 * If not done in commit messages (which you really should do) please reference and update your issue with the code changes.
 * Even if you have write access to the repository, do not directly push or merge your own pull requests. Let another team member review your PR and approve.
 

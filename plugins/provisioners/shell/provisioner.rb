@@ -1,7 +1,11 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "pathname"
 require "tempfile"
 
 require "vagrant/util/downloader"
+require "vagrant/util/line_buffer"
 require "vagrant/util/retryable"
 
 module VagrantPlugins
@@ -65,20 +69,27 @@ module VagrantPlugins
 
       protected
 
-      # This handles outputting the communication data back to the UI
+      def build_outputs
+        outputs = {
+          stdout: Vagrant::Util::LineBuffer.new { |line| handle_comm(:stdout, line) },
+          stderr: Vagrant::Util::LineBuffer.new { |line| handle_comm(:stderr, line) },
+        }
+        block = proc { |type, data|
+          outputs[type] << data if outputs[type]
+        }
+        return outputs, block
+      end
+
+      # This handles outputting the communication line back to the UI
       def handle_comm(type, data)
         if [:stderr, :stdout].include?(type)
-          # Output the data with the proper color based on the stream.
+          # Output the line with the proper color based on the stream.
           color = type == :stdout ? :green : :red
-
-          # Clear out the newline since we add one
-          data = data.chomp
-          return if data.empty?
 
           options = {}
           options[:color] = color if !config.keep_color
 
-          @machine.ui.detail(data.chomp, options)
+          @machine.ui.detail(data.chomp, **options)
         end
       end
 
@@ -103,11 +114,10 @@ module VagrantPlugins
               raise Vagrant::Errors::SSHNotReady if info.nil?
             end
 
+            comm.upload(path.to_s, upload_path)
             user = info[:username]
             comm.sudo("chown -R #{user} #{upload_path}",
                       error_check: false)
-
-            comm.upload(path.to_s, upload_path)
 
             if config.name
               @machine.ui.detail(I18n.t("vagrant.provisioners.shell.running",
@@ -121,12 +131,16 @@ module VagrantPlugins
             end
 
             # Execute it with sudo
-            comm.execute(
-              command,
-              sudo: config.privileged,
-              error_key: :ssh_bad_exit_status_muted
-            ) do |type, data|
-              handle_comm(type, data)
+            outputs, handler = build_outputs
+            begin
+              comm.execute(
+                command,
+                sudo: config.privileged,
+                error_key: :ssh_bad_exit_status_muted,
+                &handler
+              )
+            ensure
+              outputs.values.map(&:close)
             end
           end
         end
@@ -161,7 +175,7 @@ module VagrantPlugins
               info = @machine.ssh_info
               raise Vagrant::Errors::SSHNotReady if info.nil?
             end
-            
+
             comm.upload(path.to_s, remote_path)
 
             if config.name
@@ -176,12 +190,16 @@ module VagrantPlugins
             end
 
             # Execute it with sudo
-            comm.execute(
-              command,
-              shell: :powershell,
-              error_key: :ssh_bad_exit_status_muted
-            ) do |type, data|
-              handle_comm(type, data)
+            begin
+              outputs, handler = build_outputs
+              comm.execute(
+                command,
+                shell: :powershell,
+                error_key: :ssh_bad_exit_status_muted,
+                &handler
+              )
+            ensure
+              outputs.values.map(&:close)
             end
           end
         end
@@ -245,8 +263,15 @@ module VagrantPlugins
             end
 
             # Execute it with sudo
-            comm.sudo(command, { elevated: config.privileged, interactive: config.powershell_elevated_interactive }) do |type, data|
-              handle_comm(type, data)
+            begin
+              outputs, handler = build_outputs
+              comm.sudo(command,
+                elevated: config.privileged,
+                interactive: config.powershell_elevated_interactive,
+                &handler
+              )
+            ensure
+              outputs.values.map(&:close)
             end
           end
         end

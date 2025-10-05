@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require_relative "../../../../base"
 
 require Vagrant.source_root.join("plugins/providers/hyperv/action/read_guest_ip")
@@ -5,7 +8,7 @@ require Vagrant.source_root.join("plugins/providers/hyperv/action/read_guest_ip"
 describe VagrantPlugins::HyperV::Action::ReadGuestIP do
   let(:app){ double("app") }
   let(:env){ {ui: ui, machine: machine} }
-  let(:ui){ double("ui") }
+  let(:ui){ Vagrant::UI::Silent.new }
   let(:provider){ double("provider", driver: driver) }
   let(:driver){ double("driver") }
   let(:machine){ double("machine", provider: provider) }
@@ -31,7 +34,7 @@ describe VagrantPlugins::HyperV::Action::ReadGuestIP do
     end
 
     it "should set the host information into the env" do
-      expect(env).to receive(:[]=).with(:machine_ssh_info, host: "ADDRESS")
+      expect(env).to receive(:[]=).with(:machine_ssh_info, { host: "ADDRESS" })
       expect(driver).to receive(:read_guest_ip).and_return("ip" => "ADDRESS")
       subject.call(env)
     end

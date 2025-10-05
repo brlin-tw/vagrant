@@ -1,5 +1,22 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
+# Load the shared helpers first to make the custom
+# require helper available.
+require "vagrant/shared_helpers"
+
 require "log4r"
-require "vagrant/util/credential_scrubber"
+
+# Add patches to log4r to support trace level
+require "vagrant/patches/log4r"
+require "vagrant/patches/net-ssh"
+require "vagrant/patches/rubygems"
+require "vagrant/patches/timeout_error"
+
+# Set our log levels and include trace
+require 'log4r/configurator'
+Log4r::Configurator.custom_levels(*(["TRACE"] + Log4r::Log4rConfig::LogLevels))
+
 # Update the default formatter within the log4r library to ensure
 # sensitive values are being properly scrubbed from logger data
 class Log4r::BasicFormatter
@@ -8,7 +25,6 @@ class Log4r::BasicFormatter
     Vagrant::Util::CredentialScrubber.desensitize(vagrant_format_object(obj))
   end
 end
-
 
 require "optparse"
 
@@ -34,7 +50,7 @@ module VagrantPlugins
   OptionParser = Vagrant::OptionParser
 end
 
-require "vagrant/shared_helpers"
+# Load in our helpers and utilities
 require "rubygems"
 require "vagrant/util"
 require "vagrant/plugin/manager"
@@ -42,25 +58,22 @@ require "vagrant/plugin/manager"
 # Enable logging if it is requested. We do this before
 # anything else so that we can setup the output before
 # any logging occurs.
-if ENV["VAGRANT_LOG"] && ENV["VAGRANT_LOG"] != ""
-  # Require Log4r and define the levels we'll be using
-  require 'log4r/config'
-  Log4r.define_levels(*Log4r::Log4rConfig::LogLevels)
 
-  level = nil
-  begin
-    level = Log4r.const_get(ENV["VAGRANT_LOG"].upcase)
-  rescue NameError
-    # This means that the logging constant wasn't found,
-    # which is fine. We just keep `level` as `nil`. But
-    # we tell the user.
-    level = nil
+# NOTE: We must do this little hack to allow
+# rest-client to write using the `<<` operator.
+# See https://github.com/rest-client/rest-client/issues/34#issuecomment-290858
+# for more information
+class VagrantLogger < Log4r::Logger
+  def << msg
+    debug(msg.strip)
   end
+end
 
-  # Some constants, such as "true" resolve to booleans, so the
-  # above error checking doesn't catch it. This will check to make
-  # sure that the log level is an integer, as Log4r requires.
-  level = nil if !level.is_a?(Integer)
+if ENV["VAGRANT_LOG"] && ENV["VAGRANT_LOG"] != ""
+  level = Log4r::LNAMES.index(ENV["VAGRANT_LOG"].upcase)
+  if level.nil?
+    level = Log4r::LNAMES.index("FATAL")
+  end
 
   if !level
     # We directly write to stderr here because the VagrantError system
@@ -74,18 +87,17 @@ if ENV["VAGRANT_LOG"] && ENV["VAGRANT_LOG"] != ""
   # Set the logging level on all "vagrant" namespaced
   # logs as long as we have a valid level.
   if level
-    # NOTE: We must do this little hack to allow
-    # rest-client to write using the `<<` operator.
-    # See https://github.com/rest-client/rest-client/issues/34#issuecomment-290858
-    # for more information
-    class VagrantLogger < Log4r::Logger
-      def << (msg)
-        debug(msg.strip)
+    ["vagrant", "vagrantplugins"].each do |lname|
+      logger = VagrantLogger.new(lname)
+      if ENV["VAGRANT_LOG_FILE"] && ENV["VAGRANT_LOG_FILE"] != ""
+        logger.outputters = Log4r::FileOutputter.new("vagrant", filename: ENV["VAGRANT_LOG_FILE"])
+      else
+        logger.outputters = Log4r::Outputter.stderr
       end
+      logger.level = level
     end
-    logger = VagrantLogger.new("vagrant")
-    logger.outputters = Log4r::Outputter.stderr
-    logger.level = level
+    Log4r::RootLogger.instance.level = level
+
     base_formatter = Log4r::BasicFormatter.new
     if ENV["VAGRANT_LOG_TIMESTAMP"]
       base_formatter = Log4r::PatternFormatter.new(
@@ -93,13 +105,8 @@ if ENV["VAGRANT_LOG"] && ENV["VAGRANT_LOG"] != ""
         date_pattern: "%F %T"
       )
     end
-    # Vagrant Cloud gem uses RestClient to make HTTP requests, so
-    # log them if debug is enabled and use Vagrants logger
-    require 'rest_client'
-    RestClient.log = logger
 
     Log4r::Outputter.stderr.formatter = Vagrant::Util::LoggingFormatter.new(base_formatter)
-    logger = nil
   end
 end
 
@@ -126,31 +133,57 @@ ENV.each do |k, v|
   global_logger.info("#{k}=#{v.inspect}") if k.start_with?("VAGRANT_")
 end
 
+# If the vagrant_ssl library exists, a recent version
+# of openssl is in use and its needed to load all the
+# providers needed
+vagrant_ssl_locations = [
+  File.expand_path("vagrant/vagrant_ssl.so", __dir__),
+  File.expand_path("vagrant/vagrant_ssl.bundle", __dir__)
+]
+if vagrant_ssl_locations.any? { |f| File.exist?(f) }
+  global_logger.debug("vagrant ssl helper found for loading ssl providers")
+  begin
+    require "vagrant/vagrant_ssl"
+    Vagrant.vagrant_ssl_load
+    global_logger.debug("ssl providers successfully loaded")
+  rescue LoadError => err
+    global_logger.warn("failed to load ssl providers, attempting to continue (#{err})")
+  rescue => err
+    global_logger.warn("unexpected failure loading ssl providers, attempting to continue (#{err})")
+  end
+else
+  global_logger.warn("vagrant ssl helper was not found, continuing...")
+end
+
 # We need these components always so instead of an autoload we
 # just require them explicitly here.
 require "vagrant/plugin"
 require "vagrant/registry"
 
 module Vagrant
-  autoload :Action,        'vagrant/action'
-  autoload :Alias,         'vagrant/alias'
-  autoload :BatchAction,   'vagrant/batch_action'
-  autoload :Box,           'vagrant/box'
-  autoload :BoxCollection, 'vagrant/box_collection'
-  autoload :CLI,           'vagrant/cli'
-  autoload :Command,       'vagrant/command'
-  autoload :Config,        'vagrant/config'
-  autoload :Driver,        'vagrant/driver'
-  autoload :Environment,   'vagrant/environment'
-  autoload :Errors,        'vagrant/errors'
-  autoload :Guest,         'vagrant/guest'
-  autoload :Host,          'vagrant/host'
-  autoload :Machine,       'vagrant/machine'
-  autoload :MachineIndex,  'vagrant/machine_index'
-  autoload :MachineState,  'vagrant/machine_state'
-  autoload :Plugin,        'vagrant/plugin'
-  autoload :UI,            'vagrant/ui'
-  autoload :Util,          'vagrant/util'
+  autoload :Action,         'vagrant/action'
+  autoload :Alias,          'vagrant/alias'
+  autoload :BatchAction,    'vagrant/batch_action'
+  autoload :Box,            'vagrant/box'
+  autoload :BoxCollection,  'vagrant/box_collection'
+  autoload :BoxMetadata,    'vagrant/box_metadata'
+  autoload :Bundler,        'vagrant/bundler'
+  autoload :CLI,            'vagrant/cli'
+  autoload :CapabilityHost, 'vagrant/capability_host'
+  autoload :Config,         'vagrant/config'
+  autoload :Environment,    'vagrant/environment'
+  autoload :Errors,         'vagrant/errors'
+  autoload :Guest,          'vagrant/guest'
+  autoload :Host,           'vagrant/host'
+  autoload :Machine,        'vagrant/machine'
+  autoload :MachineIndex,   'vagrant/machine_index'
+  autoload :MachineState,   'vagrant/machine_state'
+  autoload :Plugin,         'vagrant/plugin'
+  autoload :Registry,       'vagrant/registry'
+  autoload :UI,             'vagrant/ui'
+  autoload :Util,           'vagrant/util'
+  autoload :Vagrantfile,    'vagrant/vagrantfile'
+  autoload :VERSION,        'vagrant/version'
 
   # These are the various plugin versions and their components in
   # a lazy loaded Hash-like structure.
@@ -174,6 +207,8 @@ module Vagrant
     c.register([:"2", :provisioner])  { Plugin::V2::Provisioner }
     c.register([:"2", :push])         { Plugin::V2::Push }
     c.register([:"2", :synced_folder]) { Plugin::V2::SyncedFolder }
+
+    c.register(:remote)               { Plugin::Remote::Plugin }
   end
 
   # Configure a Vagrant environment. The version specifies the version
@@ -238,7 +273,7 @@ module Vagrant
 
   # @deprecated
   def self.require_plugin(name)
-    puts "Vagrant.require_plugin is deprecated and has no effect any longer."
+    puts "require_plugin is deprecated and has no effect any longer."
     puts "Use `vagrant plugin` commands to manage plugins. This warning will"
     puts "be removed in the next version of Vagrant."
   end
@@ -262,9 +297,9 @@ module Vagrant
   #
   # Examples are shown below:
   #
-  #   Vagrant.require_version(">= 1.3.5")
-  #   Vagrant.require_version(">= 1.3.5", "< 1.4.0")
-  #   Vagrant.require_version("~> 1.3.5")
+  #   require_version(">= 1.3.5")
+  #   require_version(">= 1.3.5", "< 1.4.0")
+  #   require_version("~> 1.3.5")
   #
   def self.require_version(*requirements)
     logger = Log4r::Logger.new("vagrant::root")

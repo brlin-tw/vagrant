@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require File.expand_path("../../../../base", __FILE__)
 
 require Vagrant.source_root.join("plugins/communicators/winrm/communicator")
@@ -8,7 +11,7 @@ describe VagrantPlugins::CommunicatorWinRM::Communicator do
   let(:winrm) { double("winrm", timeout: 1, host: nil, port: 5986, guest_port: 5986) }
   let(:config) { double("config", winrm: winrm) }
   let(:provider) { double("provider") }
-  let(:ui) { double("ui") }
+  let(:ui) { Vagrant::UI::Silent.new }
   let(:machine) { double("machine", config: config, provider: provider, ui: ui) }
   let(:shell) { double("shell") }
   let(:good_output) { WinRM::Output.new.tap { |out| out.exitcode = 0 } }
@@ -33,7 +36,6 @@ describe VagrantPlugins::CommunicatorWinRM::Communicator do
         allow(provider).to receive(:capability?).with(:winrm_info).and_return(false)
 
         # Get us through the detail prints
-        allow(ui).to receive(:detail)
         allow(shell).to receive(:host)
         allow(shell).to receive(:port)
         allow(shell).to receive(:username)

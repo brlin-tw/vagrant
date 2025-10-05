@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require_relative "../../../base"
 
 require Vagrant.source_root.join("plugins/providers/virtualbox/provider")
@@ -62,6 +65,14 @@ describe VagrantPlugins::ProviderVirtualBox::Provider do
 
       expect { subject.usable?(true) }.
         to raise_error(Vagrant::Errors::VirtualBoxInstallIncomplete)
+    end
+
+    it "raises an exception if VBoxManage is not found" do
+      allow(VagrantPlugins::ProviderVirtualBox::Driver::Meta).to receive(:new).
+        and_raise(Vagrant::Errors::VBoxManageNotFoundError)
+
+      expect { subject.usable?(true) }.
+        to raise_error(Vagrant::Errors::VBoxManageNotFoundError)
     end
   end
 

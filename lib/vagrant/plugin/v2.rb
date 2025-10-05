@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "log4r"
 
 # We don't autoload components because if we're loading anything in the
@@ -10,6 +13,7 @@ module Vagrant
     module V2
       autoload :Command, "vagrant/plugin/v2/command"
       autoload :Communicator, "vagrant/plugin/v2/communicator"
+      autoload :Components, "vagrant/plugin/v2/components"
       autoload :Config, "vagrant/plugin/v2/config"
       autoload :Guest,  "vagrant/plugin/v2/guest"
       autoload :Host,   "vagrant/plugin/v2/host"
@@ -20,6 +24,10 @@ module Vagrant
       autoload :Provisioner, "vagrant/plugin/v2/provisioner"
       autoload :SyncedFolder, "vagrant/plugin/v2/synced_folder"
       autoload :Trigger, "vagrant/plugin/v2/trigger"
+
+      # Errors
+      autoload :Error, "vagrant/plugin/v2/error"
+      autoload :InvalidCommandName, "vagrant/plugin/v2/error"
     end
   end
 end

@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "monitor"
 require "pathname"
 require "set"
@@ -23,13 +26,13 @@ module Vagrant
       attr_reader :plugin_file
       # @return [Pathname] path to solution file
       attr_reader :solution_file
-      # @return [Array<Gem::Dependency>] list of required dependencies
+      # @return [Array<Gem::Resolver::DependencyRequest>] list of required dependencies
       attr_reader :dependency_list
 
       # @param [Pathname] plugin_file Path to plugin file
       # @param [Pathname] solution_file Custom path to solution file
       def initialize(plugin_file:, solution_file: nil)
-        @logger = Log4r::Logger.new("vagrant::bundler::signature_file")
+        @logger = Log4r::Logger.new("vagrant::bundler::solution_file")
         @plugin_file = Pathname.new(plugin_file.to_s)
         if solution_file
           @solution_file = Pathname.new(solution_file.to_s)
@@ -46,13 +49,16 @@ module Vagrant
       # Set the list of dependencies for this solution
       #
       # @param [Array<Gem::Dependency>] dependency_list List of dependencies for the solution
+      # @return [Array<Gem::Resolver::DependencyRequest>]
       def dependency_list=(dependency_list)
         Array(dependency_list).each do |d|
           if !d.is_a?(Gem::Dependency)
             raise TypeError, "Expected `Gem::Dependency` but received `#{d.class}`"
           end
         end
-        @dependency_list = dependency_list.map(&:freeze).freeze
+        @dependency_list = dependency_list.map do |d|
+          Gem::Resolver::DependencyRequest.new(d, nil).freeze
+        end.freeze
       end
 
       # @return [Boolean] contained solution is valid
@@ -62,8 +68,9 @@ module Vagrant
 
       # @return [FalseClass] invalidate this solution file
       def invalidate!
-        @logger.debug("manually invalidating solution file")
         @valid = false
+        @logger.debug("manually invalidating solution file #{self}")
+        @valid
       end
 
       # Delete the solution file
@@ -92,7 +99,7 @@ module Vagrant
         @logger.debug("writing solution file contents to disk")
         solution_file.write({
           dependencies: dependency_list.map { |d|
-            [d.name, d.requirements_list]
+            [d.dependency.name, d.dependency.requirements_list]
           },
           checksum: plugin_file_checksum,
           vagrant_version: Vagrant::VERSION
@@ -121,9 +128,10 @@ module Vagrant
           version: solution[:vagrant_version]
         )
         @logger.debug("loading solution dependency list")
-        @dependency_list = solution[:dependencies].map do |name, requirements|
-          Gem::Dependency.new(name, requirements)
-        end
+        @dependency_list = Array(solution[:dependencies]).map do |name, requirements|
+          gd = Gem::Dependency.new(name, requirements)
+          Gem::Resolver::DependencyRequest.new(gd, nil).freeze
+        end.freeze
         @logger.debug("solution dependency list: #{dependency_list}")
         @valid = true
       end
@@ -158,6 +166,7 @@ module Vagrant
           Vagrant::Util::HashWithIndifferentAccess.new(hash)
         rescue => err
           @logger.warn("failed to load solution file, ignoring (error: #{err})")
+          nil
         end
       end
     end
@@ -183,8 +192,11 @@ module Vagrant
     attr_reader :env_plugin_gem_path
     # @return [Pathname] Vagrant environment data path
     attr_reader :environment_data_path
+    # @return [Array<Gem::Specification>, nil] List of builtin specs
+    attr_accessor :builtin_specs
 
     def initialize
+      @builtin_specs = []
       @plugin_gem_path = Vagrant.user_data_path.join("gems", RUBY_VERSION).freeze
       @logger = Log4r::Logger.new("vagrant::bundler")
     end
@@ -240,10 +252,21 @@ module Vagrant
       solution = nil
       composed_set = generate_vagrant_set
 
+      # Force the composed set to allow prereleases
+      if Vagrant.allow_prerelease_dependencies?
+        @logger.debug("enabling prerelease dependency matching due to user request")
+        composed_set.prerelease = true
+      end
+
       if solution_file&.valid?
         @logger.debug("loading cached solution set")
         solution = solution_file.dependency_list.map do |dep|
-          spec = composed_set.find_all(dep).first
+          spec = composed_set.find_all(dep).select do |dep_spec|
+            next(true) unless Gem.loaded_specs.has_key?(dep_spec.name)
+
+            Gem.loaded_specs[dep_spec.name].version.eql?(dep_spec.version)
+          end.first
+
           if !spec
             @logger.warn("failed to locate specification for dependency - #{dep}")
             @logger.warn("invalidating solution file - #{solution_file}")
@@ -275,7 +298,6 @@ module Vagrant
         # Never allow dependencies to be remotely satisfied during init
         request_set.remote = false
 
-        repair_result = nil
         begin
           @logger.debug("resolving solution from available specification set")
           # Resolve the request set to ensure proper activation order
@@ -501,7 +523,20 @@ module Vagrant
       if Vagrant.strict_dependency_enforcement
         @logger.debug("Enabling strict dependency enforcement")
         plugin_deps += vagrant_internal_specs.map do |spec|
-          next if system_plugins.include?(spec.name)
+          # NOTE: When working within bundler, skip any system plugins and
+          # default gems. However, when not within bundler (in the installer)
+          # include them as strict dependencies to prevent the resolver from
+          # attempting to create a solution with a newer version. The request
+          # set does allow for resolving conservatively but it can't be set
+          # from the public API (requires an instance variable set on the resolver
+          # instance) so strict dependencies are used instead.
+          if Vagrant.in_bundler?
+            next if system_plugins.include?(spec.name)
+            # # If this spec is for a default plugin included in
+            # # the ruby stdlib, ignore it
+            next if spec.default_gem?
+          end
+
           # If we are not running within the installer and
           # we are not within a bundler environment then we
           # only want activated specs
@@ -514,8 +549,10 @@ module Vagrant
         @logger.debug("Disabling strict dependency enforcement")
       end
 
-      @logger.debug("Dependency list for installation:\n - " \
-        "#{plugin_deps.map{|d| "#{d.name} #{d.requirement}"}.join("\n - ")}")
+      dep_list = plugin_deps.sort_by(&:name).map { |d|
+        "#{d.name} #{d.requirement}"
+      }.join("\n - ")
+      @logger.debug("Dependency list for installation:\n - #{dep_list}")
 
       all_sources = source_list.values.flatten.uniq
       default_sources = DEFAULT_GEM_SOURCES & all_sources
@@ -550,13 +587,19 @@ module Vagrant
 
       # Create the request set for the new plugins
       request_set = Gem::RequestSet.new(*plugin_deps)
-      request_set.prerelease = Vagrant.prerelease?
 
       installer_set = Gem::Resolver.compose_sets(
         installer_set,
         generate_builtin_set(system_plugins),
         generate_plugin_set(skips)
       )
+
+      if Vagrant.allow_prerelease_dependencies?
+        @logger.debug("enabling prerelease dependency matching based on user request")
+        request_set.prerelease = true
+        installer_set.prerelease = true
+      end
+
       @logger.debug("Generating solution set for installation.")
 
       # Generate the required solution set for new plugins
@@ -582,7 +625,7 @@ module Vagrant
       install_path = extra[:env_local] ? env_plugin_gem_path : plugin_gem_path
       result = request_set.install_into(install_path.to_s, true,
         ignore_dependencies: true,
-        prerelease: Vagrant.prerelease?,
+        prerelease: Vagrant.prerelease? || Vagrant.allow_prerelease_dependencies?,
         wrappers: true,
         document: []
       )
@@ -629,7 +672,6 @@ module Vagrant
         self_spec.activate
         @logger.info("Activated vagrant specification version - #{self_spec.version}")
       end
-      self_spec.runtime_dependencies.each { |d| gem d.name, *d.requirement.as_list }
       # discover all the gems we have available
       list = {}
       if Gem.respond_to?(:default_specifications_dir)
@@ -638,17 +680,23 @@ module Vagrant
         spec_dir = Gem::Specification.default_specifications_dir
       end
       directories = [spec_dir]
-      Gem::Specification.find_all{true}.each do |spec|
-        list[spec.full_name] = spec
+      if Vagrant.in_bundler?
+        Gem::Specification.find_all{true}.each do |spec|
+          list[spec.name] = spec
+        end
+      else
+        builtin_specs.each do |spec|
+          list[spec.name] = spec
+        end
       end
-      if(!Object.const_defined?(:Bundler))
+      if Vagrant.in_installer?
         directories += Gem::Specification.dirs.find_all do |path|
           !path.start_with?(Gem.user_dir)
         end
       end
       Gem::Specification.each_spec(directories) do |spec|
-        if !list[spec.full_name]
-          list[spec.full_name] = spec
+        if !list[spec.name] || list[spec.name].version < spec.version
+          list[spec.name] = spec
         end
       end
       list.values
@@ -740,7 +788,6 @@ module Vagrant
               request.name == matcher["gem_name"]
             end
             if desired_activation_request && !desired_activation_request.full_spec.activated?
-              activation_request = desired_activation_request
               @logger.warn("Found misordered activation request for #{desired_activation_request.full_name}. Moving to solution HEAD.")
               solution.delete(desired_activation_request)
               solution.unshift(desired_activation_request)
@@ -812,12 +859,22 @@ module Vagrant
       end
 
       def find_all(req)
-        @specs.select do |spec|
-          allow_prerelease = spec.name == "vagrant" && Vagrant.prerelease?
-          req.match?(spec, allow_prerelease)
+        r = @specs.select do |spec|
+          # When matching requests against builtin specs, we _always_ enable
+          # prerelease matching since any prerelease that's found in this
+          # set has been added explicitly and should be available for all
+          # plugins to resolve against. This includes Vagrant itself since
+          # it is considered a prerelease when in development mode
+          req.match?(spec, true)
         end.map do |spec|
           Gem::Resolver::InstalledSpecification.new(self, spec)
         end
+        # If any of the results are a prerelease, we need to mark the request
+        # to allow prereleases so the solution can be properly fulfilled
+        if r.any? { |x| x.version.prerelease? }
+          req.dependency.prerelease = true
+        end
+        r
       end
     end
 
@@ -851,7 +908,7 @@ module Vagrant
       # DependencyRequest +req+.
       def find_all(req)
         @specs.values.flatten.select do |spec|
-          req.match?(spec)
+          req.match?(spec, prerelease)
         end.map do |spec|
           source = Gem::Source::Vendor.new(@directories[spec])
           Gem::Resolver::VendorSpecification.new(self, spec, source)
@@ -861,7 +918,7 @@ module Vagrant
       ##
       # Loads a spec with the given +name+. +version+, +platform+ and +source+ are
       # ignored.
-      def load_spec (name, version, platform, source)
+      def load_spec(name, version, platform, source)
         version = Gem::Version.new(version) if !version.is_a?(Gem::Version)
         @specs.fetch(name, []).detect{|s| s.name == name && s.version == version}
       end

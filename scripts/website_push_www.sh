@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 
 # Set the tmpdir
 if [ -z "$TMPDIR" ]; then
@@ -34,7 +37,7 @@ git add .
 git commit -q -m "Deploy by $USER"
 
 git remote add heroku git@heroku.com:vagrantup-www-2.git
-git push -f heroku master
+git push -f heroku main
 
 # Cleanup the deploy
 rm -rf $DEPLOY

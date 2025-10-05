@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require_relative "../../../base"
 require_relative "../../../../../plugins/commands/init/command"
 
@@ -33,7 +36,6 @@ describe VagrantPlugins::CommandInit::Command do
     it "creates a minimal Vagrantfile" do
       described_class.new(["-m"], env).execute
       contents = File.read(vagrantfile_path)
-      expect(contents).to_not match(/#/)
       expect(contents).to_not match(/provision/)
     end
 

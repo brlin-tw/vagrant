@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "pathname"
 require "tempfile"
 require "thread"
@@ -17,6 +20,10 @@ module Vagrant
   # @return [Integer]
   # @note This is not the maximum time for a thread to complete.
   THREAD_MAX_JOIN_TIMEOUT = 60
+
+  # List of required external tools that are expected to be
+  # present when running outside of the installers
+  REQUIRED_EXTERNAL_TOOLS = ["bsdtar", "curl", "ssh"].map(&:freeze).freeze
 
   # This holds a global lock for the duration of the block. This should
   # be invoked around anything that is modifying process state (such as
@@ -77,7 +84,7 @@ module Vagrant
   #
   # @return [String]
   def self.log_level
-    ENV["VAGRANT_LOG"]
+    ENV.fetch("VAGRANT_LOG", "fatal").downcase
   end
 
   # Returns the URL prefix to the server.
@@ -123,6 +130,14 @@ module Vagrant
   # @return [Boolean]
   def self.prerelease?
     Gem::Version.new(Vagrant::VERSION).prerelease?
+  end
+
+  # This returns true/false if the Vagrant should allow prerelease
+  # versions when resolving plugin dependency constraints
+  #
+  # @return [Boolean]
+  def self.allow_prerelease_dependencies?
+    !!ENV["VAGRANT_ALLOW_PRERELEASE"]
   end
 
   # This allows control over dependency resolution when installing
@@ -213,5 +228,11 @@ module Vagrant
   def self.default_cli_options
     @_default_cli_options = [] if !@_default_cli_options
     @_default_cli_options.dup
+  end
+
+  def self.detect_missing_tools
+    REQUIRED_EXTERNAL_TOOLS.find_all do |tool|
+      !Vagrant::Util::Which.which(tool)
+    end
   end
 end

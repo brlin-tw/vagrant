@@ -1,7 +1,16 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require File.expand_path("../../../base", __FILE__)
 
 describe Vagrant::Action::Builder do
   let(:data) { { data: [] } }
+  let(:primary) { true }
+  let(:subject) do
+    described_class.new.tap do |b|
+      b.primary = primary
+    end
+  end
 
   # This returns a proc that can be used with the builder
   # that simply appends data to an array in the env.
@@ -245,8 +254,8 @@ describe Vagrant::Action::Builder do
     end
 
     it "applies them properly" do
-      hook_proc = proc{ |h| h.append(appender_proc(2)) }
-      expect(manager).to receive(:action_hooks).with(:test_action).
+      hook_proc = proc{ |h| h.append(appender_proc(:hook)) }
+      allow(manager).to receive(:action_hooks).with(:test_action).
         and_return([hook_proc])
 
       data[:action_name] = :test_action
@@ -254,22 +263,23 @@ describe Vagrant::Action::Builder do
       subject.use appender_proc(1)
       subject.call(data)
 
-      expect(data[:data]).to eq([1, 2])
-      expect(data[:action_hooks_already_ran]).to eq(true)
+      expect(data[:data]).to eq([1, :hook])
     end
 
-    it "applies without prepend/append if it has already" do
-      hook_proc = proc{ |h| h.append(appender_proc(2)) }
-      expect(manager).to receive(:action_hooks).with(:test_action).
+    it "applies them properly even with nested stacks" do
+      hook_proc = proc{ |h| h.append(appender_proc(:hook)) }
+      allow(manager).to receive(:action_hooks).with(:test_action).
         and_return([hook_proc])
 
       data[:action_name] = :test_action
 
       subject.use appender_proc(1)
-      subject.call(data.merge(action_hooks_already_ran: true))
-
-      expect(data[:data]).to eq([1])
+      subject.use Vagrant::Action::Builtin::Call, proc {} do |env, b2|
+        b2.use appender_proc(2)
+      end
       subject.call(data)
+
+      expect(data[:data]).to eq([1, 2, :hook])
     end
   end
 
@@ -359,10 +369,69 @@ describe Vagrant::Action::Builder do
     end
 
     it "should call hook before running action" do
-      instance = described_class.build(ActionTwo)
+      instance = described_class.build(ActionTwo).tap { |b| b.primary = true }
       instance.call(data)
       expect(data[:data].first).to eq(:first)
       expect(data[:data].last).to eq(2)
+    end
+
+    context "when hook matches action in subsequent builder" do
+      let(:hook_action_name) { ActionOne }
+
+      before do
+        data[:action_name] = :test_action_name
+        data[:raw_action_name] = :machine_test_action_name
+      end
+
+      it "should execute the hook" do
+        described_class.build(ActionTwo).tap { |b| b.primary = true }.call(data)
+        described_class.build(ActionOne).tap { |b| b.primary = true }.call(data)
+        expect(data[:data]).to include(:first)
+      end
+    end
+
+    context "when hook matches action name in subsequent builder" do
+      let(:hook_action_name) { :test_action_name }
+
+      before do
+        data[:action_name] = :test_action_name
+        data[:raw_action_name] = :machine_test_action_name
+      end
+
+      it "should execute the hook" do
+        described_class.build(ActionTwo).tap { |b| b.primary = true }.call(data)
+        described_class.build(ActionOne).tap { |b| b.primary = true }.call(data)
+        expect(data[:data]).to include(:first)
+      end
+
+      it "should execute the hook multiple times" do
+        described_class.build(ActionTwo).tap { |b| b.primary = true }.call(data)
+        described_class.build(ActionOne).tap { |b| b.primary = true }.call(data)
+        expect(data[:data].count{|d| d == :first}).to eq(2)
+      end
+    end
+
+    context "when applying triggers" do
+      let(:triggers) { double("triggers") }
+
+      before do
+        data[:action_name] = :test_action_name
+        data[:raw_action_name] = :machine_test_action_name
+        data[:triggers] = triggers
+        allow(triggers).to receive(:find).and_return([])
+      end
+
+      it "should attempt to find triggers based on raw action" do
+        expect(triggers).to receive(:find).with(data[:raw_action_name], any_args).and_return([])
+        described_class.build(ActionOne).call(data)
+      end
+
+      it "should only attempt to find triggers based on raw action once" do
+        expect(triggers).to receive(:find).with(data[:raw_action_name], :before, any_args).once.and_return([])
+        expect(triggers).to receive(:find).with(data[:raw_action_name], :after, any_args).once.and_return([])
+        described_class.build(ActionOne).call(data)
+        described_class.build(ActionOne).call(data)
+      end
     end
 
     context "when hook is appending to action" do
@@ -475,6 +544,7 @@ describe Vagrant::Action::Builder do
 
     let(:subject) do
       @subject ||= described_class.new.tap do |b|
+        b.primary = primary
         b.use Vagrant::Action::Builtin::EnvSet
         b.use Vagrant::Action::Builtin::Confirm
       end
@@ -629,6 +699,7 @@ describe Vagrant::Action::Builder do
 
     let(:subject) do
       @subject ||= described_class.new.tap do |b|
+        b.primary = primary
         b.use Vagrant::Action::Builtin::EnvSet
         b.use Vagrant::Action::Builtin::Confirm
       end
@@ -637,12 +708,7 @@ describe Vagrant::Action::Builder do
     before { allow(triggers).to receive(:find).and_return([]) }
     after { @subject = nil }
 
-    it "should mark action hooks applied within env" do
-      subject.apply_action_name(env)
-      expect(env[:action_hooks_already_ran]).to be_truthy
-    end
-
-    context "when a plugin has added an action hook" do
+    context "when a plugin has added an action hook using prepend" do
       let(:plugin) do
         @plugin ||= Class.new(Vagrant.plugin("2")) do
           name "Test Plugin"
@@ -659,16 +725,9 @@ describe Vagrant::Action::Builder do
         @plugin = nil
       end
 
-      it "should add new action to the call stack" do
+      it "should add new action to the beginning of the call stack" do
         subject.apply_action_name(env)
         expect(subject.stack[0].first).to eq(Vagrant::Action::Builtin::Call)
-      end
-
-      it "should only add new action to the call stack once" do
-        subject.apply_action_name(env)
-        subject.apply_action_name(env)
-        expect(subject.stack[0].first).to eq(Vagrant::Action::Builtin::Call)
-        expect(subject.stack[1].first).not_to eq(Vagrant::Action::Builtin::Call)
       end
     end
 

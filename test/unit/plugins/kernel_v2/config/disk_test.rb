@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require File.expand_path("../../../../base", __FILE__)
 
 require Vagrant.source_root.join("plugins/kernel_v2/config/disk")
@@ -9,7 +12,7 @@ describe VagrantPlugins::Kernel_V2::VagrantConfigDisk do
 
   subject { described_class.new(type) }
 
-  let(:ui) { double("ui") }
+  let(:ui) { Vagrant::UI::Silent.new }
   let(:env) { double("env", ui: ui) }
   let(:provider) { double("provider") }
   let(:machine) { double("machine", name: "name", provider: provider, env: env,
@@ -30,8 +33,6 @@ describe VagrantPlugins::Kernel_V2::VagrantConfigDisk do
   end
 
   before do
-    env = double("env")
-
     allow(provider).to receive(:capability?).with(:validate_disk_ext).and_return(true)
     allow(provider).to receive(:capability).with(:validate_disk_ext, "vdi").and_return(true)
     allow(provider).to receive(:capability?).with(:set_default_disk_ext).and_return(true)
@@ -119,7 +120,7 @@ describe VagrantPlugins::Kernel_V2::VagrantConfigDisk do
   describe "#add_provider_config" do
     it "normalizes provider config" do
       test_provider_config = {provider__something: "special" }
-      subject.add_provider_config(test_provider_config)
+      subject.add_provider_config(**test_provider_config)
       expect(subject.provider_config).to eq( { provider: {something: "special" }} )
     end
   end
