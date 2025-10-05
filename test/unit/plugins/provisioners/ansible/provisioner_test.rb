@@ -732,6 +732,21 @@ VF
         config.inventory_path = existing_file
       end
 
+      it "handles inventory_path containing spaces by shell-escaping the value in the shell command" do
+        # simulate an inventory path with spaces
+        spacey = File.join(File.dirname(existing_file), "inv dir with space.yml")
+        config.inventory_path = spacey
+
+        expect(Vagrant::Util::Subprocess).to receive(:execute).with('ansible-playbook', any_args) { |*args|
+          # When building the shell command for display, the --inventory-file value
+          # should be shell-escaped so that spaces don't split the argument
+          found = args.any? do |a|
+            a.is_a?(String) && a.include?("--inventory-file=") && a.include?("inv dir with space")
+          end
+          expect(found).to be(true)
+        }.and_return(default_execute_result)
+      end
+
       it_should_set_arguments_and_environment_variables 6
 
       it "does not generate the inventory and uses given inventory path instead" do
@@ -819,6 +834,17 @@ VF
           raw_opt_index = cmd_opts[:env]['ANSIBLE_SSH_ARGS'].index("-o ControlMaster=no")
           default_opt_index = cmd_opts[:env]['ANSIBLE_SSH_ARGS'].index("-o ControlMaster=auto")
           expect(raw_opt_index).to be < default_opt_index
+        }.and_return(default_execute_result)
+      end
+
+      it "wraps IdentityFile paths that contain spaces in double quotes inside ANSIBLE_SSH_ARGS" do
+        # simulate a private key path with spaces
+        ssh_info[:private_key_path] = ['/path/with space/my key']
+        allow(machine).to receive(:ssh_info).and_return(ssh_info)
+
+        expect(Vagrant::Util::Subprocess).to receive(:execute).with('ansible-playbook', any_args) { |*args|
+          cmd_opts = args.last
+          expect(cmd_opts[:env]['ANSIBLE_SSH_ARGS']).to include('IdentityFile="/path/with space/my key"')
         }.and_return(default_execute_result)
       end
 
