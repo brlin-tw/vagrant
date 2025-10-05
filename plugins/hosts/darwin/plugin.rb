@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "vagrant"
 
 module VagrantPlugins
@@ -69,6 +72,11 @@ module VagrantPlugins
       host_capability("darwin", "nfs_exports_template") do
         require_relative "cap/nfs"
         Cap::NFS
+      end
+
+      host_capability("darwin", "version") do
+        require_relative "cap/version"
+        Cap::Version
       end
     end
   end

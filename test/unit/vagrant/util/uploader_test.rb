@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require File.expand_path("../../../base", __FILE__)
 
 require "vagrant/util/uploader"
@@ -5,7 +8,7 @@ require "vagrant/util/uploader"
 describe Vagrant::Util::Uploader do
   let(:destination) { "fake" }
   let(:file) { "my/file.box" }
-  let(:curl_options) { [destination, "--request", "PUT", "--upload-file", file, {notify: :stderr}] }
+  let(:curl_options) { [destination, "--request", "PUT", "--upload-file", file, "--fail", {notify: :stderr}] }
 
   let(:subprocess_result) do
     double("subprocess_result").tap do |result|

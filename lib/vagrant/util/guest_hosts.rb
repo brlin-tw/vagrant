@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 module Vagrant
   module Util
     # Helper methods for modfiying guests /etc/hosts file
@@ -17,7 +20,7 @@ module Vagrant
           basename = name.split(".", 2)[0]
           comm.sudo <<-EOH.gsub(/^ {14}/, '')
           grep -w '#{name}' /etc/hosts || {
-            for i in {1..#{loop_bound}}; do
+            for i in #{[*1..loop_bound].join(' ')}; do
               grep -w "127.0.${i}.1" /etc/hosts || {
                 echo "127.0.${i}.1 #{name} #{basename}" >> /etc/hosts
                 break

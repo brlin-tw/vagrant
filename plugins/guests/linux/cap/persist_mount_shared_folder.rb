@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "vagrant/util"
 
 require_relative "../../../synced_folders/unix_mount_helpers"
@@ -34,13 +37,12 @@ module VagrantPlugins
                 mount_options, _, _ = data[:plugin].capability(
                   :mount_options, name, guest_path, data)
                 if data[:plugin].capability?(:mount_name)
-                  name = data[:plugin].capability(:mount_name, data)
+                  name = data[:plugin].capability(:mount_name, name, data)
                 end
               else
                 next
               end
 
-              mount_options = "#{mount_options},nofail"
               {
                 name: name,
                 mount_point: guest_path,
@@ -62,9 +64,17 @@ module VagrantPlugins
           machine.communicate.test("test -f /etc/fstab")
         end
 
+        def self.contains_vagrant_data?(machine)
+          machine.communicate.test("grep '#VAGRANT-BEGIN' /etc/fstab")
+        end
+
         def self.remove_vagrant_managed_fstab(machine)
           if fstab_exists?(machine)
-            machine.communicate.sudo("sed -i '/\#VAGRANT-BEGIN/,/\#VAGRANT-END/d' /etc/fstab")
+            if contains_vagrant_data?(machine)
+                machine.communicate.sudo("sed -i '/\#VAGRANT-BEGIN/,/\#VAGRANT-END/d' /etc/fstab")
+            else
+                @@logger.info("no vagrant data in fstab file, carrying on")
+            end
           else
             @@logger.info("no fstab file found, carrying on")
           end

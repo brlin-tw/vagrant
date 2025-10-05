@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 en:
   vagrant:
     alert: |-
@@ -425,7 +428,7 @@ en:
           Please use with caution, as some of the features may not be fully
           functional yet.
         features: |-
-          You have requested to enabled the experimental flag with the following features:
+          You have requested to enable the experimental flag with the following features:
 
           Features:  %{features}
 
@@ -434,10 +437,10 @@ en:
       not_in_installer: |-
         You appear to be running Vagrant outside of the official installers.
         Note that the installers are what ensure that Vagrant has all required
-        dependencies, and Vagrant assumes that these dependencies exist. By
-        running outside of the installer environment, Vagrant may not function
-        properly. To remove this warning, install Vagrant using one of the
-        official packages from vagrantup.com.
+        dependencies. Vagrant has detected that the following  executables are
+        currently unavailable:
+
+          %{tools}
       upgraded_v1_dotfile: |-
         A Vagrant 1.0.x state file was found for this environment. Vagrant has
         gone ahead and auto-upgraded this to the latest format. Everything
@@ -501,12 +504,47 @@ en:
         provider. Double-check your requested provider to verify you didn't
         simply misspell it.
 
-        If you're adding a box from HashiCorp's Vagrant Cloud, make sure the box is
+        If you're adding a box from HashiCorp's Vagrant Public Registry, make sure the box is
         released.
 
         Name: %{name}
         Address: %{url}
         Requested provider: %{requested}
+      box_add_no_architecture_support: |-
+        The box you're attempting to add doesn't support the requested
+        architecture. Please find an alternate box that support the
+        requested architecture.
+
+        Box: %{name}
+        Address: %{url}
+        Architecture: %{architecture}
+      box_add_no_matching_architecture: |-
+        The box you're attempting to add doesn't support the requested
+        architecture with the current provider. The following providers
+        support the requested architecture for this box:
+
+          %{supported_providers}
+
+        If the above providers cannot be used, please find and alternate
+        box that supports the requested architecture.
+
+        Box: %{name}
+        Address: %{url}
+        Architecture: %{architecture}
+        Provider: %{provider}
+      box_add_no_matching_provider_version: |-
+        The box you're attempting to add has no available version that
+        matches the constraints you requested with support for the
+        required provider and architecture. Versions of the box that
+        support the required provider and architecture are listed
+        below.
+
+        Box: %{name}
+        Address: %{url}
+        Constraints: %{constraints}
+        Architecture: %{architecture}
+        Provider: %{provider}
+        Supported versions: %{versions}
       box_add_no_matching_version: |-
         The box you're attempting to add has no available version that
         matches the constraints you requested. Please double-check your
@@ -518,11 +556,10 @@ en:
         Constraints: %{constraints}
         Available versions: %{versions}
       box_add_short_not_found: |-
-        The box '%{name}' could not be found or
-        could not be accessed in the remote catalog. If this is a private
-        box on HashiCorp's Vagrant Cloud, please verify you're logged in via
-        `vagrant login`. Also, please double-check the name. The expanded
-        URL and error message are shown below:
+        The box '%{name}' could not be found or could not be accessed in the remote catalog. 
+        If this is a private box on the HashiCorp Vagrant Public Registry, please verify 
+        you're logged in via `vagrant cloud auth login`. Also, please double-check the name. 
+        The expanded URL and error message are shown below:
 
         URL: %{url}
         Error: %{error}
@@ -615,6 +652,12 @@ en:
         The metadata associated with the box '%{name}' appears corrupted.
         This is most often caused by a disk issue or system crash. Please
         remove the box, re-add it, and try again.
+      box_metadata_missing_required_fields: |-
+        The metadata associated with the box '%{name}' appears to be missing
+        the required field '%{required_field}'. Please ensure `metadata.json`
+        has all required fields.
+
+        Required fields: %{all_fields}
       box_metadata_download_error: |-
         There was an error while downloading the metadata for this box.
         The error message is shown below:
@@ -650,6 +693,13 @@ en:
         the box are shown below:
 
         %{providers}
+      box_not_found_with_provider_architecture: |-
+        The box '%{name}' for the provider '%{provider}' isn't installed
+        for the architecture '%{architecture}'. Please double-check and
+        try again. The installed architectures for the box are shown
+        below:
+
+        %{architectures}
       box_not_found_with_provider_and_version: |-
         The box '%{name}' (v%{version}) with provider '%{provider}'
         could not be found. Please double check and try again. You
@@ -660,35 +710,51 @@ en:
         Provider expected: %{expected}
         Provider of box: %{actual}
       box_remove_multi_provider: |-
-        You requested to remove the box '%{name}'. This box has
-        multiple providers. You must explicitly select a single
-        provider to remove with `--provider`.
+        You requested to remove the box '%{name}' version '%{version}'. This
+        box has multiple providers. You must explicitly select a single provider to
+        remove with `--provider` or specify the `--all-providers` flag to remove
+        all providers.
 
         Available providers: %{providers}
       box_remove_multi_version: |-
-        You requested to remove the box '%{name}' with provider
-        '%{provider}'. This box has multiple versions. You must
-        explicitly specify which version you want to remove with
-        the `--box-version` flag or specify the `--all` flag to remove all
-        versions. The available versions for this box are:
+        You requested to remove the box '%{name}'. This box has multiple
+        versions. You must explicitly specify which version you want to
+        remove with the `--box-version` flag or specify the `--all` flag
+        to remove all versions. The available versions for this box are:
 
         %{versions}
       box_remove_not_found: |-
         The box you requested to be removed could not be found. No
         boxes named '%{name}' could be found.
       box_remove_provider_not_found: |-
-        You requested to remove the box '%{name}' with provider
-        '%{provider}'. The box '%{name}' exists but not with
-        the provider specified. Please double-check and try again.
+        You requested to remove the box '%{name}' version '%{version}'
+        with provider '%{provider}'. The box '%{name}' exists but not
+        with the provider specified. Please double-check and try again.
 
         The providers for this are: %{providers}
       box_remove_version_not_found: |-
-        You requested to remove the box '%{name}' version '%{version}' with
-        provider '%{provider}', but that specific version of the box is
-        not installed. Please double-check and try again. The available versions
-        for this box are:
+        You requested to remove the box '%{name}' version '%{version}',
+        but that specific version of the box is not installed. Please
+        double-check and try again. The available versions for this box
+        are:
 
         %{versions}
+      box_remove_multi_architecture: |-
+        You requested to remove the box '%{name}' version '%{version}'
+        with provider '%{provider}'. This box has multiple architectures.
+        You must explicitly select a single architecture to remove with
+        `--architecture` or specify the `--all-architectures` flag to
+        remove all architectures. The available architectures for this
+        box are:
+
+        %{architectures}
+      box_remove_architecture_not_found: |-
+        You requested to remove the box '%{name}' version '%{version}'
+        with provider '%{provider}' and architecture '%{architecture}' but
+        that specific architecture is not installed. Please double-check
+        and try again. The available architectures are:
+
+        %{architectures}
       box_server_not_set: |-
         A URL to a Vagrant Cloud server is not set, so boxes cannot be added with a
         shorthand ("mitchellh/precise64") format. You may also be seeing this
@@ -701,9 +767,15 @@ en:
       box_update_multi_provider: |-
         You requested to update the box '%{name}'. This box has
         multiple providers. You must explicitly select a single
-        provider to remove with `--provider`.
+        provider to update with `--provider`.
 
         Available providers: %{providers}
+      box_update_multi_architecture: |-
+        You requested to update the box '%{name}' (v%{version}) with provider
+        '%{provider}'. This box has multiple architectures. You must explicitly
+        select a single architecture to update with `--architecture`.
+
+        Available architectures: %{architectures}
       box_update_no_box: |-
         Box '%{name}' not installed, can't check for updates.
       box_update_no_metadata: |-
@@ -713,6 +785,15 @@ en:
         such as from the public Vagrant Server.
       box_update_no_name: |-
         This machine doesn't have a box. Won't update anything.
+      box_version_invalid: |-
+        The format of box version provided (%{version}) is incorrect. The
+        version must follow the semantic versioning format or semantic
+        versioning compatible constraint format. Examples of valid values:
+
+          2.0
+          2.1.4
+          >= 2
+          < 3.0.0
       bundler_disabled: |-
         Vagrant's built-in bundler management mechanism is disabled because
         Vagrant is running in an external bundler environment. In these
@@ -794,9 +875,9 @@ en:
         matching this provider. For example, if you're using VirtualBox,
         the clone environment must also be using VirtualBox.
       cloud_init_not_found: |-
-        cloud-init is not found. Please ensure that cloud-init is installed and 
+        cloud-init is not found. Please ensure that cloud-init is installed and
         available on path for guest '%{guest_name}'.
-      cloud_init_command_failed: |- 
+      cloud_init_command_failed: |-
         cloud init command '%{cmd}' failed on guest '%{guest_name}'.
       command_deprecated: |-
         The command 'vagrant %{name}' has been deprecated and is no longer functional
@@ -845,6 +926,19 @@ en:
       create_iso_host_cap_not_found: |-
         Vagrant cannot create an iso due to the host capability for creating isos not existing.
         Vagrant will now exit.
+      darwin_mount_failed: |-
+        Failed to mount folders in Darwin guest. The command attempted was:
+
+        %{command}
+
+        The error output from the last command was:
+
+        %{output}
+      darwin_version_failed: |-
+        Failed to determine macOS version.
+
+          Version string: %{version}
+          Error information: %{error}
       destroy_requires_force: |-
         Destroy doesn't have a TTY to ask for confirmation. Please pass the
         `--force` flag to force a destroy, otherwise attach a TTY so that
@@ -867,6 +961,13 @@ en:
         support.
 
         State file path: %{state_file}
+      download_already_in_progress_error: |-
+        Download to global Vagrant location already in progress. This
+        may be caused by other Vagrant processes attempting to download
+        a file to the same location.
+
+        Download path: %{dest_path}
+        Lock file path: %{lock_file_path}
       downloader_error: |-
         An error occurred while downloading the remote file. The error
         message, if any, is reproduced below. Please fix this error and try
@@ -1148,6 +1249,14 @@ en:
         get an ID of a target machine from `vagrant global-status` to run
         this command on. A final option is to change to a directory with a
         Vagrantfile and to try again.
+      oscdimg_command_missing: |-
+        Vagrant failed to locate the oscdimg.exe executable which is required
+        for creating ISO files. Please ensure the oscdimg.exe executable is
+        available on the configured PATH. If the oscdimg.exe executable is
+        not found on the local system, it can be installed with the Windows
+        Assessment and Deployment Kit:
+
+          https://go.microsoft.com/fwlink/?linkid=2196127
       plugin_gem_not_found: |-
         The plugin '%{name}' could not be installed because it could not
         be found. Please double check the name and try again.
@@ -1238,6 +1347,30 @@ en:
         following command:
 
           vagrant plugin install --local
+      plugin_needs_developer_tools: |-
+        Vagrant failed to install the requested plugin because development tools
+        are required for installation but are not currently installed on this
+        machine. Please install development tools and then try this command
+        again.
+      plugin_missing_library: |-
+        Vagrant failed to install the requested plugin because it depends
+        on development files for a library which is not currently installed
+        on this system. The following library is required by the '%{name}'
+        plugin:
+
+          %{library}
+
+        If a package manager is used on this system, please install the development
+        package for the library. The name of the package will be similar to:
+
+          %{library}-dev or %{library}-devel
+
+        After the library and development files have been installed, please
+        run the command again.
+      plugin_missing_ruby_dev: |-
+        Vagrant failed to install the requested plugin because the Ruby header
+        files could not be found. Install the ruby development package for your
+        system and then run this command again.
       powershell_not_found: |-
         Failed to locate the powershell executable on the available PATH. Please
         ensure powershell is installed and available on the local PATH, then
@@ -1276,6 +1409,9 @@ en:
         A file or directory you're attempting to include with your packaged
         box has symlinks in it. Vagrant cannot include symlinks in the
         resulting package. Please remove the symlinks and try again.
+      package_invalid_info: |-
+        The information file that you've attempted to include doesn't exist or isn't a valid JSON file.
+        Please check that the file exists and is titled 'info.json' and try again.
       provider_cant_install: |-
         The provider '%{provider}' doesn't support automatic installation.
         This is a limitation of this provider. Please report this as a feature
@@ -1527,6 +1663,14 @@ en:
         sometimes keys in your ssh-agent can interfere with this as well,
         so verify the keys are valid there in addition to standard
         file paths.
+      ssh_key_type_not_supported_by_server: |-
+        The private key you are attempting to generate is not supported by
+        the guest SSH server. Please use one of the available key types defined
+        below that is supported by the guest SSH server.
+
+        Requested: %{requested_key_type}
+        Available: %{available_key_types}
+
       ssh_not_ready: |-
         The provider for this Vagrant-managed machine is reporting that it
         is not yet ready for SSH. Depending on your provider this can carry
@@ -1620,6 +1764,11 @@ en:
       uploader_interrupted: |-
         The upload was interrupted by an external signal. It did not
         complete.
+      vagrant_locked: |-
+        The requested Vagrant action is locked. This may be caused
+        by other Vagrant processes attempting to do a similar action.
+
+        Lock file path: %{lock_file_path}
       vagrantfile_exists: |-
         `Vagrantfile` already exists in this directory. Remove it before
         running `vagrant init`.
@@ -1693,6 +1842,11 @@ en:
         4.2.14 contains a critical bug which prevents it from working with
         Vagrant. VirtualBox 4.2.16+ fixes this problem. Please upgrade
         VirtualBox.
+      virtualbox_config_not_found: |-
+        Vagrant was unable to locate the configuration file for the requested
+        VirtualBox VM. Verify the requested VM exists and try again.
+
+          UUID provided: %{uuid}
       virtualbox_disks_controller_not_found: |-
         Vagrant expected to find a storage controller called '%{name}',
         but there is no controller with this name attached to the current VM.
@@ -1739,6 +1893,10 @@ en:
         VirtualBox is complaining that the installation is incomplete. Please
         run `VBoxManage --version` to see the error message which should contain
         instructions on how to fix this error.
+      virtualbox_machine_folder_not_found: |-
+        Vagrant failed to determine the machine folder on this host from
+        the VirtualBox system information. Try running the command again.
+        If this error persists, please report this error as a bug.
       virtualbox_mount_failed: |-
         Vagrant was unable to mount VirtualBox shared folders. This is usually
         because the filesystem "vboxsf" is not available. This filesystem is
@@ -1822,6 +1980,18 @@ en:
         outputted:
 
         %{vboxmanage} --version
+      virtualbox_invalid_host_subnet: |-
+        The IP address configured for the host-only network is not within the
+        allowed ranges. Please update the address used to be within the allowed
+        ranges and run the command again.
+
+          Address: %{address}
+          Ranges: %{ranges}
+
+        Valid ranges can be modified in the /etc/vbox/networks.conf file. For
+        more information including valid format see:
+
+          https://www.virtualbox.org/manual/ch06.html#network_hostonly
       vm_creation_required: |-
         VM must be created before running this command. Run `vagrant up` first.
       vm_inaccessible: |-
@@ -1884,7 +2054,7 @@ en:
           Disks of type ':dvd' cannot be defined as a primary disks. Please
           remove the 'primary' argument for disk '%{name}' on guest '%{machine}'.
         invalid_ext: |-
-          Disk type '%{ext}' is not a valid disk extention for '%{name}'. Please pick one of the following supported disk types: %{exts}
+          Disk type '%{ext}' is not a valid disk extension for '%{name}'. Please pick one of the following supported disk types: %{exts}
         invalid_type: |-
           Disk type '%{type}' is not a valid type. Please pick one of the following supported disk types: %{types}
         invalid_size: |-
@@ -1942,7 +2112,19 @@ en:
           The `connect_timeout` key only accepts values of Integer type. Received
           `%{given}` type which cannot be converted to an Integer type.
         connect_timeout_invalid_value: |-
-          The `connect_timeout` key only accepts values greater than 1 (received `%{given}`)
+          The `connect_timeout` key only accepts values greater than or equal to 1 (received `%{given}`)
+        connect_retries_invalid_type: |-
+          The `connect_retries` key only accepts values of Integer type. Received
+          `%{given}` type which cannot be converted to an Integer type.
+        connect_retries_invalid_value: |-
+          The `connect_retries` key only accepts values greater than or equal to 0 (received `%{given}`)
+        connect_retry_delay_invalid_type: |-
+          The `connect_retry_delay` key only accepts values of Numeric type. Received
+          `%{given}` type which cannot be converted to a Numeric type.
+        connect_retry_delay_invalid_value: |-
+          The `connect_retry_delay` key only accepts values greater than or equal to 0 (received `%{given}`)
+        connect_invalid_key_type: |-
+          Invalid SSH key type set ('%{given}'). Supported types: %{supported}
       triggers:
         bad_trigger_type: |-
           The type '%{type}' defined for trigger '%{trigger}' is not valid. Must be one of the following types: '%{types}'
@@ -2028,7 +2210,7 @@ en:
         name_invalid: |-
           The sub-VM name '%{name}' is invalid. Please don't use special characters.
         network_ip_ends_in_one: |-
-          You assigned a static IP ending in ".1" to this machine.
+          You assigned a static IP ending in ".1" or ":1" to this machine.
           This is very often used by the router and can cause the
           network to not work properly. If the network doesn't work
           properly, try changing this IP.
@@ -2095,10 +2277,10 @@ en:
       box:
         no_installed_boxes: "There are no installed boxes! Use `vagrant box add` to add some."
         remove_in_use_query: |-
-          Box '%{name}' (v%{version}) with provider '%{provider}' appears
-          to still be in use by at least one Vagrant environment. Removing
-          the box could corrupt the environment. We recommend destroying
-          these environments first:
+          Box '%{name}' (v%{version}) with provider '%{provider}' and
+          architectures '%{architecture}' appears to still be in use by
+          at least one Vagrant environment. Removing the box could corrupt
+          the environment. We recommend destroying these environments first:
 
           %{users}
 
@@ -2529,6 +2711,7 @@ en:
           exporting: Exporting NFS shared folders...
           installing: "Installing NFS client..."
           mounting: Mounting NFS shared folders...
+          mounting_entry: "%{hostpath} => %{guestpath}"
           v4_with_udp_warning: |-
 
             WARNING: Invalid NFS settings detected!
@@ -2569,7 +2752,7 @@ en:
         share_folders:
           creating: Creating shared folders metadata...
           mounting: Mounting shared folders...
-          mounting_entry: "%{guestpath} => %{hostpath}"
+          mounting_entry: "%{hostpath} => %{guestpath}"
           nomount_entry: "Automounting disabled: %{hostpath}"
         set_default_nic_type:
           e1000_warning: |-
@@ -2865,7 +3048,7 @@ en:
           Vagrant has detected a host range pattern in the `groups` option.
           Vagrant doesn't fully check the validity of these parameters!
 
-          Please check https://docs.ansible.com/ansible/intro_inventory.html#hosts-and-groups
+          Please check https://docs.ansible.com/ansible/latest/user_guide/intro_inventory.html#inventory-basics-formats-hosts-and-groups
           for more information.
         cannot_detect: |-
           Vagrant does not support detecting whether Ansible is installed
@@ -2994,11 +3177,13 @@ en:
           You must set `python_version` as an integer or string that represents an integer.
         version_type_missing: |-
           You must set the option `install_type` when specifying a `version`.
+        salt_invalid_shasum_error: |-
+          The bootstrap-salt script downloaded from '%{source}' couldn't be verified. Expected SHA256 '%{expected_sha}', but computed '%{computed_sha}'
 
     pushes:
       file:
         no_destination: "File destination must be specified."
-    
+
     autocomplete:
       installed: |-
         Autocomplete installed at paths:

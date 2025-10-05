@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require File.expand_path("../../../../base", __FILE__)
 
 require Vagrant.source_root.join("plugins/kernel_v2/config/vm")
@@ -41,11 +44,7 @@ describe Vagrant::Action::Builtin::Provision do
     end
   end
 
-  let(:ui) do
-    double("ui").tap do |result|
-      allow(result).to receive(:info)
-    end
-  end
+  let(:ui) { Vagrant::UI::Silent.new }
 
   let(:instance){ described_class.new(app, env) }
 

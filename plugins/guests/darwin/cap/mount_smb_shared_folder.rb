@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "vagrant/util/retryable"
 require "shellwords"
 
@@ -29,9 +32,12 @@ module VagrantPlugins
             "//#{options[:smb_username]}:#{smb_password}@#{options[:smb_host]}/#{name} " +
             "#{expanded_guest_path}"
           retryable(on: Vagrant::Errors::DarwinMountFailed, tries: 10, sleep: 2) do
-            machine.communicate.execute(
-              mount_command,
-              error_class: Vagrant::Errors::DarwinMountFailed)
+            result = machine.communicate.execute(mount_command)
+            if result.exit_code != 0
+              raise Vagrant::Errors::DarwinMountFailed,
+                command: mount_command,
+                output: result.stderr
+            end
           end
         end
       end

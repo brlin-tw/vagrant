@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require File.expand_path("../../../../base", __FILE__)
 
 require Vagrant.source_root.join("plugins/communicators/winssh/communicator")
@@ -33,8 +36,7 @@ describe VagrantPlugins::CommunicatorWinSSH::Communicator do
   let(:config) { double("config", winssh: winssh, ssh: ssh) }
   # Provider mock
   let(:provider) { double("provider") }
-  # UI mock
-  let(:ui) { double("ui") }
+  let(:ui) { Vagrant::UI::Silent.new }
   # SSH info mock
   let(:ssh_info) { double("ssh_info") }
   # Machine mock built with previously defined
@@ -111,10 +113,6 @@ describe VagrantPlugins::CommunicatorWinSSH::Communicator do
   describe "#wait_for_ready" do
     before(&connection_setup)
     context "with no static config (default scenario)" do
-      before do
-        allow(ui).to receive(:detail)
-      end
-
       context "when ssh_info requires a multiple tries before it is ready" do
         before do
           expect(machine).to receive(:ssh_info).

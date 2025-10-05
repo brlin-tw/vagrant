@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require_relative "../../../../base"
 
 require Vagrant.source_root.join("plugins/synced_folders/rsync/command/rsync_auto")
@@ -42,9 +45,6 @@ describe VagrantPlugins::SyncedFolderRSync::Command::RsyncAuto do
       allow(m).to receive(:state).and_return(double("state", id: :not_created))
       allow(m).to receive(:env).and_return(iso_env)
       allow(m).to receive(:config).and_return(double("config"))
-
-
-      allow(m.ui).to receive(:error).and_return(nil)
     end
   end
 
@@ -76,12 +76,11 @@ describe VagrantPlugins::SyncedFolderRSync::Command::RsyncAuto do
 
     before do
       allow(subject).to receive(:with_target_vms) { |&block| block.call machine }
-      allow(machine.ui).to receive(:info)
       allow(machine.state).to receive(:id).and_return(:created)
       allow(machine.env).to receive(:cwd).
         and_return("/Users/brian/code/vagrant-sandbox")
       allow(machine.provider).to receive(:capability?).and_return(false)
-      allow(machine.config).to receive(:vm).and_return(true)
+      allow(machine.config).to receive(:vm).and_return(double("vm"))
       allow(machine.config.vm).to receive(:synced_folders).and_return(config_synced_folders)
 
       allow(subject).to receive(:synced_folders).
@@ -92,12 +91,16 @@ describe VagrantPlugins::SyncedFolderRSync::Command::RsyncAuto do
     end
 
     it "does not sync folders outside of the cwd" do
+      allow(machine.ui).to receive(:info).and_call_original
       expect(machine.ui).to receive(:info).
-        with("Not syncing /Not/The/Same/Path as it is not part of the current working directory.")
+        with("Not syncing /Not/The/Same/Path as it is not part of the current working directory.").
+        and_call_original
       expect(machine.ui).to receive(:info).
-        with("Watching: /Users/brian/code/vagrant-sandbox")
+        with("Watching: /Users/brian/code/vagrant-sandbox").
+        and_call_original
       expect(machine.ui).to receive(:info).
-        with("Watching: /Users/brian/code/relative-dir")
+        with("Watching: /Users/brian/code/relative-dir").
+        and_call_original
       expect(helper_class).to receive(:rsync_single)
 
       expect(Listen).to receive(:to).
@@ -237,7 +240,6 @@ describe VagrantPlugins::SyncedFolderRSync::Command::RsyncAuto do
       before do
         allow_any_instance_of(Vagrant::Errors::VagrantError).
           to receive(:translate_error)
-        allow(machine.ui).to receive(:error)
       end
 
       context "when rsync command fails" do
@@ -247,7 +249,7 @@ describe VagrantPlugins::SyncedFolderRSync::Command::RsyncAuto do
         end
 
         it "should notify on error" do
-          expect(machine.ui).to receive(:error)
+          expect(machine.ui).to receive(:error).and_call_original
           subject.callback(*args)
         end
 
@@ -263,7 +265,7 @@ describe VagrantPlugins::SyncedFolderRSync::Command::RsyncAuto do
         end
 
         it "should notify on error" do
-          expect(machine.ui).to receive(:error)
+          expect(machine.ui).to receive(:error).and_call_original
           subject.callback(*args)
         end
 

@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) HashiCorp, Inc.
+ * SPDX-License-Identifier: BUSL-1.1
+ */
+
 export default [
   {
     text: 'Intro',
@@ -7,11 +12,6 @@ export default [
   {
     text: 'Docs',
     url: '/docs',
-    type: 'inbound',
-  },
-  {
-    text: 'VMware',
-    url: '/vmware',
     type: 'inbound',
   },
   {

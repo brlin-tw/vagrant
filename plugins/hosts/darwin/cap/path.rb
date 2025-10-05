@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 module VagrantPlugins
   module HostDarwin
     module Cap
@@ -6,6 +9,7 @@ module VagrantPlugins
 
         FIRMLINK_DEFS = "/usr/share/firmlinks".freeze
         FIRMLINK_DATA_PATH = "/System/Volumes/Data".freeze
+        CATALINA_CONSTRAINT = Gem::Requirement.new("~> 10.15")
 
         # Resolve the given host path to the actual
         # usable system path by detecting firmlinks
@@ -15,6 +19,10 @@ module VagrantPlugins
         # @return [String] resolved path
         def self.resolve_host_path(env, path)
           path = File.expand_path(path)
+          # Only expand firmlink paths on Catalina
+          host_version = env.host.capability(:version)
+          return path if !CATALINA_CONSTRAINT.satisfied_by?(host_version)
+
           firmlink = firmlink_map.detect do |mount_path, data_path|
             path.start_with?(mount_path)
           end

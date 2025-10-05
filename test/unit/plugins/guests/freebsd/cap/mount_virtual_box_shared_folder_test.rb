@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require_relative "../../../../base"
 
 describe "VagrantPlugins::GuestFreeBSD::Cap::MountVirtualBoxSharedFolder" do
@@ -152,9 +155,8 @@ describe "VagrantPlugins::GuestFreeBSD::Cap::MountVirtualBoxSharedFolder" do
 
     context "with custom mount options" do
 
-      let(:ui){ double(:ui) }
+      let(:ui){ Vagrant::UI::Silent.new }
       before do
-        allow(ui).to receive(:warn)
         allow(machine).to receive(:ui).and_return(ui)
       end
 

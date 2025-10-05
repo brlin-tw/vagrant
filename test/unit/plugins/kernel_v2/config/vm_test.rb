@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require File.expand_path("../../../../base", __FILE__)
 
 require Vagrant.source_root.join("plugins/kernel_v2/config/vm")
@@ -110,6 +113,34 @@ describe VagrantPlugins::Kernel_V2::VMConfig do
       subject.clone = "foo"
       subject.finalize!
       assert_invalid
+    end
+  end
+
+  describe "#box_architecture" do
+    it "is not required" do
+      subject.box_architecture = nil
+      subject.finalize!
+      assert_valid
+    end
+
+    it "is :auto by default" do
+      subject.finalize!
+      assert_valid
+      expect(subject.box_architecture).to eq(:auto)
+    end
+
+    it "can be set to custom value" do
+      subject.box_architecture = "test-arch"
+      subject.finalize!
+      assert_valid
+      expect(subject.box_architecture).to eq("test-arch")
+    end
+
+    it "is converted to string" do
+      subject.box_architecture = :test_arch
+      subject.finalize!
+      assert_valid
+      expect(subject.box_architecture).to eq("test_arch")
     end
   end
 
@@ -708,6 +739,19 @@ describe VagrantPlugins::Kernel_V2::VMConfig do
       expect(sf).to have_key("/vagrant")
       expect(sf["/vagrant"][:disabled]).to be(false)
       expect(sf["/vagrant"][:foo]).to eq(:bar)
+    end
+
+    # This is a little bit of a special case since nfs can be specified
+    # as `type: "nfs"` or `nfs: true`
+    it "properly overrides nfs" do
+      subject.synced_folder(".", "/vagrant", nfs: true)
+      subject.synced_folder(".", "/vagrant", type: "rsync")
+      subject.finalize!
+      sf = subject.synced_folders
+      expect(sf.length).to eq(1)
+      expect(sf).to have_key("/vagrant")
+      expect(sf["/vagrant"][:type]).to be(:rsync)
+      expect(sf["/vagrant"][:nfs]).to eq(nil)
     end
 
     it "is not an error if guest path is empty but name is not" do

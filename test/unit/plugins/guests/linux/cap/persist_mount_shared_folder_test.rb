@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require_relative "../../../../base"
 
 describe "VagrantPlugins::GuestLinux::Cap::PersistMountSharedFolder" do
@@ -29,7 +32,7 @@ describe "VagrantPlugins::GuestLinux::Cap::PersistMountSharedFolder" do
   let (:folders) { {
     :folder_type => fstab_folders
   } }
-  let(:expected_mount_options) { "uid=#{options_uid},gid=#{options_gid},nofail" }
+  let(:expected_mount_options) { "uid=#{options_uid},gid=#{options_gid}" }
 
   before do
     allow(machine).to receive(:communicate).and_return(comm)
@@ -48,11 +51,10 @@ describe "VagrantPlugins::GuestLinux::Cap::PersistMountSharedFolder" do
 
   describe ".persist_mount_shared_folder" do
 
-    let(:ui){ double(:ui) }
+    let(:ui){ Vagrant::UI::Silent.new }
 
     before do
       allow(comm).to receive(:sudo).with(any_args)
-      allow(ui).to receive(:warn)
       allow(machine).to receive(:ui).and_return(ui)
     end
 
@@ -101,7 +103,7 @@ describe "VagrantPlugins::GuestLinux::Cap::PersistMountSharedFolder" do
         cap.persist_mount_shared_folder(machine, nil)
       end
     end
-   
+
     context "smb folder" do
       let (:fstab_folders) {
         Vagrant::Plugin::V2::SyncedFolder::Collection[
@@ -121,18 +123,54 @@ describe "VagrantPlugins::GuestLinux::Cap::PersistMountSharedFolder" do
         before do
           allow(folder_plugin).to receive(:capability).with(:mount_type).and_return("cifs")
           allow(folder_plugin).to receive(:capability?).with(:mount_name).and_return(true)
-          allow(folder_plugin).to receive(:capability).with(:mount_name, any_args).and_return("//192.168.42.42/dummyname")
+          allow(folder_plugin).to receive(:capability).with(:mount_name, instance_of(String), any_args).and_return("//192.168.42.42/dummyname")
         end
-      
+
         it "inserts folders into /etc/fstab" do
           expected_entry_vagrant = "//192.168.42.42/dummyname /vagrant cifs #{expected_mount_options} 0 0"
           expected_entry_test = "//192.168.42.42/dummyname /test1 cifs #{expected_mount_options} 0 0"
           expect(cap).to receive(:remove_vagrant_managed_fstab)
           expect(comm).to receive(:sudo).with(/#{expected_entry_test}\n#{expected_entry_vagrant}/)
-    
+
           cap.persist_mount_shared_folder(machine, folders)
         end
       end
     end
+  end
+  describe ".remove_vagrant_managed_fstab" do
+    let(:fstab_exists) { true }
+
+    before do
+      allow(comm).to receive(:sudo).with(any_args)
+      allow(cap).to receive(:fstab_exists?).and_return(fstab_exists)
+    end
+
+    it "removes vagrant managed fstab entries" do
+      expect(cap).to receive(:contains_vagrant_data?).and_return(true)
+      expect(comm).to receive(:sudo).with("sed -i '/#VAGRANT-BEGIN/,/#VAGRANT-END/d' /etc/fstab")
+      cap.remove_vagrant_managed_fstab(machine)
+    end
+
+    context "fstab does not exist" do
+      let(:fstab_exists) { false }
+
+      it "does not try to remove fstab entries" do
+        expect(cap).not_to receive(:contains_vagrant_data?)
+        expect(comm).not_to receive(:sudo).with("sed -i '/#VAGRANT-BEGIN/,/#VAGRANT-END/d' /etc/fstab")
+        cap.remove_vagrant_managed_fstab(machine)
+      end
+    end
+
+    context "fstab does not contain vagrant data" do
+      before do
+        expect(comm).to receive(:test).with("grep '#VAGRANT-BEGIN' /etc/fstab").and_return(false)
+      end
+
+      it "does not try to remove fstab entries" do
+        expect(comm).not_to receive(:sudo).with("sed -i '/#VAGRANT-BEGIN/,/#VAGRANT-END/d' /etc/fstab")
+        cap.remove_vagrant_managed_fstab(machine)
+      end
+    end
+
   end
 end

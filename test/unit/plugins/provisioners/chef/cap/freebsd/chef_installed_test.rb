@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require_relative "../../../../../base"
 
 require Vagrant.source_root.join("plugins/provisioners/chef/cap/freebsd/chef_installed")
@@ -23,19 +26,38 @@ describe VagrantPlugins::Chef::Cap::FreeBSD::ChefInstalled do
   end
 
   describe "#chef_installed" do
-    let(:version) { "15.0.0" }
-    let(:command) { "test -x /opt/chef_solo/bin/knife&& /opt/chef_solo/bin/knife --version | grep '15.0.0'" }
+    describe "when chef-workstation" do
+      let(:version) { "15.0.0" }
+      let(:command) { "test -x /opt/chef-workstation/bin/chef&& /opt/chef-workstation/bin/chef --version | grep '15.0.0'" }
 
-    it "returns true if installed" do
-      expect(machine.communicate).to receive(:test).
-        with(command, sudo: true).and_return(true)
-      subject.chef_installed(machine, "chef_solo", version)
+      it "returns true if installed" do
+        expect(machine.communicate).to receive(:test).
+          with(command, sudo: true).and_return(true)
+        subject.chef_installed(machine, "chef-workstation", version)
+      end
+
+      it "returns false if not installed" do
+        expect(machine.communicate).to receive(:test).
+          with(command, sudo: true).and_return(false)
+        expect(subject.chef_installed(machine, "chef-workstation", version)).to be_falsey
+      end
     end
 
-    it "returns false if not installed" do
-      expect(machine.communicate).to receive(:test).
-        with(command, sudo: true).and_return(false)
-      expect(subject.chef_installed(machine, "chef_solo", version)).to be_falsey
+    describe "when not chef-workstation" do
+      let(:version) { "15.0.0" }
+      let(:command) { "test -x /opt/chef/bin/chef-client&& /opt/chef/bin/chef-client --version | grep '15.0.0'" }
+
+      it "returns true if installed" do
+        expect(machine.communicate).to receive(:test).
+          with(command, sudo: true).and_return(true)
+        subject.chef_installed(machine, "chef_solo", version)
+      end
+
+      it "returns false if not installed" do
+        expect(machine.communicate).to receive(:test).
+          with(command, sudo: true).and_return(false)
+        expect(subject.chef_installed(machine, "chef_solo", version)).to be_falsey
+      end
     end
   end
 end

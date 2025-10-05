@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require 'optparse'
 require 'securerandom'
 
@@ -27,6 +30,10 @@ module VagrantPlugins
 
           o.on("--include FILE,FILE..", Array, "Comma separated additional files to package with the box") do |i|
             options[:include] = i
+          end
+
+          o.on("--info FILE", "Path to a custom info.json file containing additional box information") do |info|
+            options[:info] = info
           end
 
           o.on("--vagrantfile FILE", "Vagrantfile to package with the box") do |v|

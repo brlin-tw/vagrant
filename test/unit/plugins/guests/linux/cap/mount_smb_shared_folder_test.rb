@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require_relative "../../../../base"
 
 describe "VagrantPlugins::GuestLinux::Cap::MountSMBSharedFolder" do
@@ -8,7 +11,7 @@ describe "VagrantPlugins::GuestLinux::Cap::MountSMBSharedFolder" do
   end
 
   let(:machine) { double("machine", env: env, config: config) }
-  let(:env) { double("env", host: host, ui: double("ui"), data_dir: double("data_dir")) }
+  let(:env) { double("env", host: host, ui: Vagrant::UI::Silent.new, data_dir: double("data_dir")) }
   let(:host) { double("host") }
   let(:guest) { double("guest") }
   let(:comm) { VagrantTests::DummyCommunicator::Communicator.new(machine) }
@@ -43,7 +46,7 @@ describe "VagrantPlugins::GuestLinux::Cap::MountSMBSharedFolder" do
     allow(folder_plugin).to receive(:capability).with(:mount_options, mount_name, mount_guest_path, folder_options).
     and_return(["uid=#{mount_uid},gid=#{mount_gid},sec=ntlmssp,credentials=/etc/smb_creds_id", mount_uid, mount_gid])
     allow(folder_plugin).to receive(:capability).with(:mount_type).and_return("cifs")
-    allow(folder_plugin).to receive(:capability).with(:mount_name, any_args).and_return("//localhost/#{mount_name}")
+    allow(folder_plugin).to receive(:capability).with(:mount_name, mount_name, folder_options).and_return("//localhost/#{mount_name}")
   end
 
   after do
@@ -56,6 +59,7 @@ describe "VagrantPlugins::GuestLinux::Cap::MountSMBSharedFolder" do
       allow(comm).to receive(:execute).with(any_args)
       allow(machine).to receive(:guest).and_return(guest)
       allow(guest).to receive(:capability).with(:shell_expand_guest_path, mount_guest_path).and_return(mount_guest_path)
+      allow(ENV).to receive(:[]).and_call_original
       allow(ENV).to receive(:[]).with("VAGRANT_DISABLE_SMBMFSYMLINKS").and_return(false)
       allow(ENV).to receive(:[]).with("GEM_SKIP").and_return(false)
       allow(cap).to receive(:display_mfsymlinks_warning)
@@ -102,7 +106,7 @@ describe "VagrantPlugins::GuestLinux::Cap::MountSMBSharedFolder" do
       allow(gate_file).to receive(:to_path).and_return("PATH")
       allow(FileUtils).to receive(:touch)
     end
-  
+
     it "should output warning message" do
       expect(env.ui).to receive(:warn).with(/VAGRANT_DISABLE_SMBMFSYMLINKS=1/)
       cap.display_mfsymlinks_warning(env)

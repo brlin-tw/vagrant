@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require_relative "../../../../base"
 require_relative "../../../../../../plugins/hosts/linux/cap/nfs"
 require_relative "../../../../../../lib/vagrant/util"
@@ -17,7 +20,7 @@ describe VagrantPlugins::HostLinux::Cap::NFS do
   end
   let(:exports_path){ VagrantPlugins::HostLinux::Cap::NFS::NFS_EXPORTS_PATH }
   let(:env){ double(:env) }
-  let(:ui){ double(:ui) }
+  let(:ui){ Vagrant::UI::Silent.new }
   let(:host){ double(:host) }
 
   before do
@@ -125,7 +128,6 @@ describe VagrantPlugins::HostLinux::Cap::NFS do
       allow(host).to receive(:capability).with(:nfs_apply_command).and_return("/bin/true")
       allow(host).to receive(:capability).with(:nfs_check_command).and_return("/bin/true")
       allow(host).to receive(:capability).with(:nfs_start_command).and_return("/bin/true")
-      allow(ui).to receive(:info)
       allow(Vagrant::Util::Subprocess).to receive(:execute).and_call_original
       allow(Vagrant::Util::Subprocess).to receive(:execute).with("sudo", "/bin/true").and_return(double(:result, exit_code: 0))
       allow(Vagrant::Util::Subprocess).to receive(:execute).with("/bin/true").and_return(double(:result, exit_code: 0))
@@ -206,7 +208,6 @@ EOH
     let(:cap){ caps.get(:nfs_prune) }
 
     before do
-      allow(ui).to receive(:info)
       allow(Vagrant::Util::Subprocess).to receive(:execute).with("mv", any_args).
         and_call_original
     end
@@ -272,19 +273,26 @@ EOH
     context "exports file modification" do
       let(:tmp_stat) { double("tmp_stat", uid: 100, gid: 100, mode: tmp_mode) }
       let(:tmp_mode) { 0 }
-      let(:exports_stat) { double("stat", uid: exports_uid, gid: exports_gid, mode: exports_mode) }
+      let(:exports_stat) {
+        double("stat", uid: exports_uid, gid: exports_gid,
+               mode: exports_mode, :directory? => true, :writable? => true,
+               :world_writable? => true, :sticky? => true)
+      }
       let(:exports_uid) { -1 }
       let(:exports_gid) { -1 }
       let(:exports_mode) { 0 }
       let(:new_exports_file) { double("new_exports_file", path: "/dev/null/exports") }
+      let(:new_exports_path) { new_exports_file.path }
 
       before do
-        allow(File).to receive(:stat).with(new_exports_file.path).and_return(tmp_stat)
+        allow(File).to receive(:stat).and_call_original
+        allow(File).to receive(:join).with(Dir.tmpdir, "vagrant-exports").and_return(new_exports_path)
+        allow(File).to receive(:open).with(new_exports_path, "w+").and_return(new_exports_file)
+        allow(File).to receive(:stat).with(new_exports_path).and_return(tmp_stat)
         allow(File).to receive(:stat).with(tmp_exports_path.to_s).and_return(exports_stat)
         allow(new_exports_file).to receive(:puts)
         allow(new_exports_file).to receive(:close)
         allow(Vagrant::Util::Subprocess).to receive(:execute).and_return(Vagrant::Util::Subprocess::Result.new(0, "", ""))
-        allow(Tempfile).to receive(:create).with("vagrant").and_return(new_exports_file)
       end
 
       it "should retain existing file owner and group IDs" do

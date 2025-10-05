@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "thread"
 
 require_relative "base"
@@ -108,8 +111,9 @@ module VagrantPlugins
         end
 
         def gather_ansible_version
-          raw_output = ""
-          command = %w(ansible --version)
+          raw_output = ''
+          command = ['python3', '-c',
+                     "import importlib.metadata; print('ansible ' + importlib.metadata.version('ansible'))"]
 
           command << {
             notify: [:stdout, :stderr]
@@ -185,7 +189,7 @@ module VagrantPlugins
 
           inventory_file = Pathname.new(File.join(inventory_path, 'vagrant_ansible_inventory'))
           @@lock.synchronize do
-            if !File.exists?(inventory_file) or inventory_content != File.read(inventory_file)
+            if !File.exist?(inventory_file) or inventory_content != File.read(inventory_file)
               begin
                 # ansible dir inventory will ignore files starting with '.'
                 inventory_tmpfile = Tempfile.new('.vagrant_ansible_inventory', inventory_path)
@@ -298,7 +302,15 @@ module VagrantPlugins
           # Multiple Private Keys
           unless !config.inventory_path && @ssh_info[:private_key_path].size == 1
             @ssh_info[:private_key_path].each do |key|
-              ssh_options += ["-o", "IdentityFile=%s" % [key.gsub('%', '%%')]]
+              # Escape percent for sprintf and wrap in quotes when needed
+              escaped = key.gsub('%', '%%')
+              if escaped.match(/\s|\"/)
+                # Also escape any double quotes within the path
+                escaped = escaped.gsub('"', '\\"')
+                ssh_options += ["-o", "IdentityFile=\"%s\"" % [escaped]]
+              else
+                ssh_options += ["-o", "IdentityFile=%s" % [escaped]]
+              end
             end
           end
 

@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require File.expand_path("../../../base", __FILE__)
 require 'vagrant/util/guest_hosts'
 
@@ -20,8 +23,8 @@ describe "Vagrant::Util::GuestHosts" do
     end
 
     it "can add hostname to loopback interface" do
-      subject.add_hostname_to_loopback_interface(comm, "test.end", 40)
-      expect(comm.received_commands[0]).to match(/for i in {1..40}; do/)
+      subject.add_hostname_to_loopback_interface(comm, "test.end", 4)
+      expect(comm.received_commands[0]).to match(/for i in 1 2 3 4; do/)
       expect(comm.received_commands[0]).to match(/echo \"127.0.\${i}.1 test.end test\" >> \/etc\/hosts/)
     end
   end
@@ -35,8 +38,8 @@ describe "Vagrant::Util::GuestHosts" do
     end
 
     it "can add hostname to loopback interface" do
-      subject.add_hostname_to_loopback_interface(comm, "test.end", 40)
-      expect(comm.received_commands[0]).to match(/for i in {1..40}; do/)
+      subject.add_hostname_to_loopback_interface(comm, "test.end", 4)
+      expect(comm.received_commands[0]).to match(/for i in 1 2 3 4; do/)
       expect(comm.received_commands[0]).to match(/echo \"127.0.\${i}.1 test.end test\" >> \/etc\/hosts/)
     end
   end

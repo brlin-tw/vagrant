@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "log4r"
 
 module Vagrant
@@ -46,7 +49,10 @@ module Vagrant
             client_cert: env[:client_cert] ||
                            machine.config.vm.box_download_client_cert,
             insecure: !env[:insecure].nil? ?
-                        env[:insecure] : machine.config.vm.box_download_insecure
+                        env[:insecure] : machine.config.vm.box_download_insecure,
+            disable_ssl_revoke_best_effort: env.fetch(:box_download_disable_ssl_revoke_best_effort,
+                                                      machine.config.vm.box_download_disable_ssl_revoke_best_effort),
+            box_extra_download_options: env[:box_extra_download_options] || machine.config.vm.box_extra_download_options,
           }
 
           env[:ui].output(I18n.t(

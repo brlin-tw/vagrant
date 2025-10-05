@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "tmpdir"
 require_relative "../base"
 
@@ -67,12 +70,27 @@ describe Vagrant::Bundler::SolutionFile do
   describe "#dependency_list=" do
     it "should accept a list of Gem::Dependency instances" do
       list = ["dep1", "dep2"].map{ |x| Gem::Dependency.new(x) }
-      expect(subject.dependency_list = list).to eq(list)
+      subject.dependency_list = list
+      expect(subject.dependency_list.map(&:dependency)).to eq(list)
     end
 
     it "should error if list includes instance not Gem::Dependency" do
       list = ["dep1", "dep2"].map{ |x| Gem::Dependency.new(x) } << :invalid
       expect{ subject.dependency_list = list }.to raise_error(TypeError)
+    end
+
+    it "should convert list into resolver dependency request" do
+      list = ["dep1", "dep2"].map{ |x| Gem::Dependency.new(x) }
+      subject.dependency_list = list
+      subject.dependency_list.each do |dep|
+        expect(dep).to be_a(Gem::Resolver::DependencyRequest)
+      end
+    end
+
+    it "should freeze the new dependency list" do
+      list = ["dep1", "dep2"].map{ |x| Gem::Dependency.new(x) }
+      subject.dependency_list = list
+      expect(subject.dependency_list).to be_frozen
     end
   end
 
@@ -118,7 +136,6 @@ describe Vagrant::Bundler::SolutionFile do
         expect(subject.solution_file.exist?).to be_falsey
       end
     end
-
 
     context "when plugin file does exist" do
       before { subject.plugin_file.write("x") }
@@ -235,6 +252,191 @@ describe Vagrant::Bundler::SolutionFile do
             end
           end
         end
+      end
+    end
+  end
+
+  describe "#load" do
+    let(:plugin_file_exists) { false }
+    let(:solution_file_exists) { false }
+    let(:plugin_file_path) { "PLUGIN_FILE_PATH" }
+    let(:solution_file_path) { "SOLUTION_FILE_PATH" }
+    let(:plugin_file) { double("plugin-file") }
+    let(:solution_file) { double("solution-file") }
+
+    subject do
+      described_class.new(plugin_file: plugin_file_path, solution_file: solution_file_path)
+    end
+
+    before do
+      allow(Pathname).to receive(:new).with(plugin_file_path).and_return(plugin_file)
+      allow(Pathname).to receive(:new).with(solution_file_path).and_return(solution_file)
+      allow(plugin_file).to receive(:exist?).and_return(plugin_file_exists)
+      allow(solution_file).to receive(:exist?).and_return(solution_file_exists)
+    end
+
+    context "when plugin file and solution file do not exist" do
+      it "should not attempt to read the solution" do
+        expect_any_instance_of(described_class).not_to receive(:read_solution)
+        subject
+      end
+    end
+
+    context "when plugin file exists and solution file does not" do
+      let(:plugin_file_exists) { true }
+
+      it "should not attempt to read the solution" do
+        expect_any_instance_of(described_class).not_to receive(:read_solution)
+        subject
+      end
+    end
+
+    context "when solution file exists and plugin file does not" do
+      let(:solution_file_exists) { true }
+
+      it "should not attempt to read the solution" do
+        expect_any_instance_of(described_class).not_to receive(:read_solution)
+        subject
+      end
+    end
+
+    context "when solution file and plugin file exist" do
+      let(:plugin_file_exists) { true }
+      let(:solution_file_exists) { true }
+
+      let(:solution_file_contents) { "" }
+
+      before do
+        allow(solution_file).to receive(:read).and_return(solution_file_contents)
+        allow_any_instance_of(described_class).to receive(:plugin_file_checksum).and_return("VALID")
+      end
+
+      context "when solution file is empty" do
+        it "should return false" do
+          expect(subject.send(:load)).to be_falsey
+        end
+      end
+
+      context "when solution file contains invalid checksum" do
+        let(:solution_file_contents) { {checksum: "INVALID", vagrant_version: Vagrant::VERSION}.to_json }
+
+        it "should return false" do
+          expect(subject.send(:load)).to be_falsey
+        end
+      end
+
+      context "when solution file contains different Vagrant version" do
+        let(:solution_file_contents) { {checksum: "VALID", vagrant_version: "0.1"}.to_json }
+
+        it "should return false" do
+          expect(subject.send(:load)).to be_falsey
+        end
+      end
+
+      context "when solution file contains valid Vagrant version and valid checksum" do
+        let(:solution_file_contents) {
+          {checksum: "VALID", vagrant_version: Vagrant::VERSION, dependencies: file_dependencies}.to_json
+        }
+        let(:file_dependencies) { dependency_list.map{|d| [d.name, d.requirements_list]} }
+        let(:dependency_list) { [] }
+
+        it "should return true" do
+          expect(subject.send(:load)).to be_truthy
+        end
+
+        it "should be valid" do
+          expect(subject).to be_valid
+        end
+
+        context "when solution file contains dependency list" do
+          let(:dependency_list) { [
+            Gem::Dependency.new("dep1", "> 0"),
+            Gem::Dependency.new("dep2", "< 3")
+          ] }
+
+          it "should be valid" do
+            expect(subject).to be_valid
+          end
+
+          it "should convert list into dependency requests" do
+            subject.dependency_list.each do |d|
+              expect(d).to be_a(Gem::Resolver::DependencyRequest)
+            end
+          end
+
+          it "should include defined dependencies" do
+            expect(subject.dependency_list.first).to eq(dependency_list.first)
+            expect(subject.dependency_list.last).to eq(dependency_list.last)
+          end
+
+          it "should freeze the dependency list" do
+            expect(subject.dependency_list).to be_frozen
+          end
+        end
+      end
+    end
+  end
+
+  describe "#read_solution" do
+    let(:solution_file_contents) { "" }
+    let(:plugin_file_path) { "PLUGIN_FILE_PATH" }
+    let(:solution_file_path) { "SOLUTION_FILE_PATH" }
+    let(:plugin_file) { double("plugin-file") }
+    let(:solution_file) { double("solution-file") }
+
+    subject do
+      described_class.new(plugin_file: plugin_file_path, solution_file: solution_file_path)
+    end
+
+    before do
+      allow(Pathname).to receive(:new).with(plugin_file_path).and_return(plugin_file)
+      allow(Pathname).to receive(:new).with(solution_file_path).and_return(solution_file)
+      allow(plugin_file).to receive(:exist?).and_return(false)
+      allow(solution_file).to receive(:exist?).and_return(false)
+      allow(solution_file).to receive(:read).and_return(solution_file_contents)
+    end
+
+    it "should return nil when file contents are empty" do
+      expect(subject.send(:read_solution)).to be_nil
+    end
+
+    context "when file contents are hash" do
+      let(:solution_file_contents) { {checksum: "VALID"}.to_json }
+
+      it "should return a hash" do
+        expect(subject.send(:read_solution)).to be_a(Hash)
+      end
+
+      it "should return a hash with indifferent access" do
+        expect(subject.send(:read_solution)).to be_a(Vagrant::Util::HashWithIndifferentAccess)
+      end
+    end
+
+    context "when file contents are array" do
+      let(:solution_file_contents) { ["test"].to_json }
+
+      it "should return a hash" do
+        expect(subject.send(:read_solution)).to be_a(Hash)
+      end
+
+      it "should return a hash with indifferent access" do
+        expect(subject.send(:read_solution)).to be_a(Vagrant::Util::HashWithIndifferentAccess)
+      end
+    end
+
+    context "when file contents are null" do
+      let(:solution_file_contents) { "null" }
+
+      it "should return nil" do
+        expect(subject.send(:read_solution)).to be_nil
+      end
+    end
+
+    context "when file contents are invalid" do
+      let(:solution_file_contents) { "{2dfwef" }
+
+      it "should return nil" do
+        expect(subject.send(:read_solution)).to be_nil
       end
     end
   end
@@ -445,6 +647,34 @@ describe Vagrant::Bundler do
         expect(Gem.sources.sources.first.uri.to_s).to eq(described_class.const_get(:HASHICORP_GEMSTORE))
       end
     end
+
+    context "multiple specs" do
+      let(:solution_file) { double('solution_file') }
+      let(:vagrant_set)   { double('vagrant_set') }
+
+      before do
+        allow(subject).to receive(:load_solution_file).and_return(solution_file)
+        allow(subject).to receive(:generate_vagrant_set).and_return(vagrant_set)
+        allow(solution_file).to receive(:valid?).and_return(true)
+      end
+
+      it "should activate spec of deps already loaded" do
+        spec = Gem.loaded_specs.first
+        deps = [spec[0]]
+        specs = [spec[1].dup, spec[1].dup]
+        specs[0].version = Gem::Version::new('0.0.1')
+        # make sure haven't accidentally modified both
+        expect(specs[0].version).to_not eq(specs[1].version)
+
+        expect(solution_file).to receive(:dependency_list).and_return(deps)
+        expect(vagrant_set).to receive(:find_all).and_return(specs)
+        expect(subject).to receive(:activate_solution) do |activate_specs|
+          expect(activate_specs.length()).to eq(1)
+          expect(activate_specs[0].full_spec()).to eq(specs[1])
+        end
+        subject.init!([])
+      end
+    end
   end
 
   describe "#install" do
@@ -579,42 +809,46 @@ describe Vagrant::Bundler do
       end
     end
 
-    context "when run time dependencies are defined" do
-      let(:vagrant_dep_specs) { [double("spec", name: "vagrant-dep", requirement: double("spec-req", as_list: []))] }
-
-      it "should call #gem to activate the dependencies" do
-        expect(subject).to receive(:gem).with("vagrant-dep", any_args)
-        subject.send(:vagrant_internal_specs)
-      end
-    end
-
     context "when bundler is not defined" do
-      before { expect(Object).to receive(:const_defined?).with(:Bundler).and_return(false) }
+      before { expect(Vagrant).to receive(:in_bundler?).and_return(false) }
 
-      it "should load gem specification directories" do
-        expect(Gem::Specification).to receive(:dirs).and_return(spec_dirs)
-        subject.send(:vagrant_internal_specs)
-      end
+      context "when running inside the installer" do
+        before { expect(Vagrant).to receive(:in_installer?).and_return(true) }
 
-      context "when checking paths" do
-        let(:spec_dirs) { [double("spec-dir", start_with?: in_user_dir)] }
-        let(:in_user_dir) { true }
-        let(:user_dir) { double("user-dir") }
-
-        before { allow(Gem).to receive(:user_dir).and_return(user_dir) }
-
-        it "should check if path is within local user directory" do
-          expect(spec_dirs.first).to receive(:start_with?).with(user_dir).and_return(false)
+        it "should load gem specification directories" do
+          expect(Gem::Specification).to receive(:dirs).and_return(spec_dirs)
           subject.send(:vagrant_internal_specs)
         end
 
-        context "when path is not within user directory" do
-          let(:in_user_dir) { false }
+        context "when checking paths" do
+          let(:spec_dirs) { [double("spec-dir", start_with?: in_user_dir)] }
+          let(:in_user_dir) { true }
+          let(:user_dir) { double("user-dir") }
 
-          it "should use path when loading specs" do
-            expect(Gem::Specification).to receive(:each_spec) { |arg| expect(arg).to include(spec_dirs.first) }
+          before { allow(Gem).to receive(:user_dir).and_return(user_dir) }
+
+          it "should check if path is within local user directory" do
+            expect(spec_dirs.first).to receive(:start_with?).with(user_dir).and_return(false)
             subject.send(:vagrant_internal_specs)
           end
+
+          context "when path is not within user directory" do
+            let(:in_user_dir) { false }
+
+            it "should use path when loading specs" do
+              expect(Gem::Specification).to receive(:each_spec) { |arg| expect(arg).to include(spec_dirs.first) }
+              subject.send(:vagrant_internal_specs)
+            end
+          end
+        end
+      end
+
+      context "when running outside the installer" do
+        before { expect(Vagrant).to receive(:in_installer?).and_return(false) }
+
+        it "should not load gem specification directories" do
+          expect(Gem::Specification).not_to receive(:dirs)
+          subject.send(:vagrant_internal_specs)
         end
       end
     end

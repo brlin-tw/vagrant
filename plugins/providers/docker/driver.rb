@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "json"
 require "log4r"
 
@@ -23,17 +26,21 @@ module VagrantPlugins
         args = Array(opts[:extra_args])
         args << dir
         opts = {with_stderr: true}
-        result = execute('docker', 'build', *args, opts, &block)
+        result = execute('docker', 'build', *args, **opts, &block)
         # Check for the new output format 'writing image sha256...'
-        # In this case, docker builtkit is enabled. Its format is different
+        # In this case, docker buildkit is enabled. Its format is different
         # from standard docker
-        matches = result.scan(/writing image .+:([0-9a-z]+) done/i).last
+        matches = result.scan(/writing image .+:([^\s]+)/i).last
+        if !matches
+          # Check for outout of docker using containerd backend store
+          matches = result.scan(/exporting manifest list .+:([^\s]+)/i).last
+        end
         if !matches
           if podman?
             # Check for podman format when it is emulating docker CLI.
             # Podman outputs the full hash of the container on
             # the last line after a successful build.
-            match = result.split.select { |str| str.match?(/[0-9a-z]{64}/) }.last
+            match = result.split.select { |str| str.match?(/^[0-9a-z]{64}/) }.last
             return match[0..7] unless match.nil?
           else
             matches = result.scan(/Successfully built (.+)$/i).last
@@ -47,7 +54,7 @@ module VagrantPlugins
         end
 
         # Return the matched group `id`
-        matches[0]
+        matches[0].strip
       end
 
       # Check if podman emulating docker CLI is enabled.
@@ -79,7 +86,7 @@ module VagrantPlugins
             if v.index(":") != v.rindex(":")
               # If we have 2 colons, the host path is an absolute Windows URL
               # and we need to remove the colon from it
-              host, colon, guest = v.rpartition(":")
+              host, _, guest = v.rpartition(":")
               host = "//" + host[0].downcase + host[2..-1]
               v = [host, guest].join(":")
             else
@@ -122,8 +129,8 @@ module VagrantPlugins
       end
 
       def image?(id)
-        result = execute('docker', 'images', '-q').to_s
-        result =~ /^#{Regexp.escape(id)}$/
+        result = execute('docker', 'images', '-q', '--no-trunc').to_s
+        result =~ /\b#{Regexp.escape(id)}\b/
       end
 
       # Reads all current docker containers and determines what ports
@@ -139,6 +146,9 @@ module VagrantPlugins
 
         all_containers.each do |c|
           container_info = inspect_container(c)
+
+          active = container_info["State"]["Running"]
+          next unless active # Ignore used ports on inactive containers
 
           if container_info["HostConfig"]["PortBindings"]
             port_bindings = container_info["HostConfig"]["PortBindings"]
@@ -215,8 +225,9 @@ module VagrantPlugins
         execute('docker', 'rmi', id)
         return true
       rescue => e
-        return false if e.to_s.include?("is using it")
-        return false if e.to_s.include?("is being used")
+        return false if e.to_s.include?("is using it") or
+                        e.to_s.include?("is being used") or
+                        e.to_s.include?("is in use")
         raise if !e.to_s.include?("No such image")
       end
 
@@ -233,9 +244,22 @@ module VagrantPlugins
         execute('docker', 'ps', '-a', '-q', '--no-trunc').to_s.split
       end
 
+      # Attempts to first use the docker-cli tool to inspect the default bridge subnet
+      # Falls back to using /sbin/ip if that fails
+      #
       # @return [String] IP address of the docker bridge
       def docker_bridge_ip
-        output = execute('/sbin/ip', '-4', 'addr', 'show', 'scope', 'global', 'docker0')
+        bridge = inspect_network("bridge")&.first
+        if bridge 
+          bridge_ip = bridge.dig("IPAM", "Config", 0, "Gateway")
+        end
+        return bridge_ip if bridge_ip
+        @logger.debug("Failed to get bridge ip from docker, falling back to `ip`")
+        docker_bridge_ip_fallback
+      end
+
+      def docker_bridge_ip_fallback
+        output = execute('ip', '-4', 'addr', 'show', 'scope', 'global', 'docker0')
         if output =~ /^\s+inet ([0-9.]+)\/[0-9]+\s+/
           return $1.to_s
         else
@@ -329,9 +353,9 @@ module VagrantPlugins
 
         network_info = inspect_network(all_networks)
         network_info.each do |network|
-          config = network["IPAM"]["Config"]
-          if (config.size > 0 &&
-            config.first["Subnet"] == subnet_string)
+          config = Array(network.dig("IPAM", "Config"))
+          next if config.empty? || !config.first.is_a?(Hash)
+          if (config.first["Subnet"] == subnet_string)
             @logger.debug("Found existing network #{network["Name"]} already configured with #{subnet_string}")
             return network["Name"]
           end

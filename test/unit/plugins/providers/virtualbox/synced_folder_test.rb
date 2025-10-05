@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "vagrant"
 require Vagrant.source_root.join("test/unit/base")
 
@@ -59,7 +62,7 @@ describe VagrantPlugins::ProviderVirtualBox::SyncedFolder do
   end
 
   describe "#enable" do
-    let(:ui){ double(:ui) }
+    let(:ui){ Vagrant::UI::Silent.new }
     let(:guest) { double("guest") }
 
     let(:no_guestpath_folder) { {"/no_guestpath_folder"=>
@@ -72,8 +75,6 @@ describe VagrantPlugins::ProviderVirtualBox::SyncedFolder do
 
     before do
       allow(subject).to receive(:share_folders).and_return(true)
-      allow(ui).to receive(:detail).with(any_args)
-      allow(ui).to receive(:output).with(any_args)
       allow(machine).to receive(:ui).and_return(ui)
       allow(machine).to receive(:ssh_info).and_return({:username => "test"})
       allow(machine).to receive(:guest).and_return(guest)
@@ -215,7 +216,7 @@ describe VagrantPlugins::ProviderVirtualBox::SyncedFolder do
   end
 
   describe "#display_symlink_create_warning" do
-    let(:env){ double("env", ui: double("ui"), data_dir: double("data_dir")) }
+    let(:env){ double("env", ui: Vagrant::UI::Silent.new, data_dir: double("data_dir")) }
     let(:gate_file){ double("gate") }
 
     before{ allow(gate_file).to receive(:to_path).and_return("PATH") }
@@ -226,7 +227,6 @@ describe VagrantPlugins::ProviderVirtualBox::SyncedFolder do
         allow(env.data_dir).to receive(:join).and_return(gate_file)
         allow(gate_file).to receive(:exist?).and_return(false)
         allow(FileUtils).to receive(:touch)
-        allow(env.ui).to receive(:warn)
       end
 
       it "should create file" do
@@ -234,7 +234,7 @@ describe VagrantPlugins::ProviderVirtualBox::SyncedFolder do
       end
 
       it "should output warning to user" do
-        expect(env.ui).to receive(:warn)
+        expect(env.ui).to receive(:warn).and_call_original
       end
     end
 
@@ -243,7 +243,6 @@ describe VagrantPlugins::ProviderVirtualBox::SyncedFolder do
         allow(env.data_dir).to receive(:join).and_return(gate_file)
         allow(gate_file).to receive(:exist?).and_return(true)
         allow(FileUtils).to receive(:touch)
-        allow(env.ui).to receive(:warn)
       end
 
       it "should not create/update file" do
@@ -251,7 +250,7 @@ describe VagrantPlugins::ProviderVirtualBox::SyncedFolder do
       end
 
       it "should not output warning to user" do
-        expect(env.ui).not_to receive(:warn)
+        expect(env.ui).not_to receive(:warn).and_call_original
       end
     end
   end

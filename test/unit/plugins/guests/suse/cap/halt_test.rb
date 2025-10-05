@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require_relative "../../../../base"
 
 describe "VagrantPlugins::GuestSUSE::Cap::Halt" do
@@ -21,20 +24,31 @@ describe "VagrantPlugins::GuestSUSE::Cap::Halt" do
   describe ".halt" do
     let(:cap) { caps.get(:halt) }
 
-    it "runs the shutdown command" do
-      comm.expect_command("/sbin/shutdown -h now")
+    it "runs systemctl shutdown when systemctl is present" do
+      comm.stub_command('test -e /usr/bin/systemctl', exit_code: 0)
+      comm.expect_command('test -e /usr/bin/systemctl')
+      comm.expect_command("/usr/bin/systemctl poweroff &")
+      cap.halt(machine)
+    end
+
+    it "runs shutdown when systemctl is not present" do
+      comm.stub_command('test -e /usr/bin/systemctl', exit_code: 1)
+      comm.expect_command('test -e /usr/bin/systemctl')
+      comm.expect_command("/sbin/shutdown -h now &")
       cap.halt(machine)
     end
 
     it "does not raise an IOError" do
-      comm.stub_command("shutdown -h now", raise: IOError)
+      comm.stub_command('test -e /usr/bin/systemctl', exit_code: 0)
+      comm.stub_command("/usr/bin/systemctl poweroff &", raise: IOError)
       expect {
         cap.halt(machine)
       }.to_not raise_error
     end
 
     it "ignores a Vagrant::Errors::SSHDisconnected" do
-      comm.stub_command("shutdown -h now", raise: Vagrant::Errors::SSHDisconnected)
+      comm.stub_command('test -e /usr/bin/systemctl', exit_code: 1)
+      comm.stub_command("/sbin/shutdown -h now &", raise: Vagrant::Errors::SSHDisconnected)
       expect {
         cap.halt(machine)
       }.to_not raise_error

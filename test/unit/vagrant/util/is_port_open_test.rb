@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require File.expand_path("../../../base", __FILE__)
 
 require "socket"
@@ -54,5 +57,10 @@ describe Vagrant::Util::IsPortOpen do
   it "should raise an error if cannot assign requested address" do
     expect(Socket).to receive(:tcp).with("0.0.0.0", open_port, any_args).and_raise(Errno::EADDRNOTAVAIL)
     expect { subject.is_port_open?("0.0.0.0", open_port) }.to raise_error(Errno::EADDRNOTAVAIL)
+  end
+
+  it "should treat operation already in progress as unavailable" do
+    expect(Socket).to receive(:tcp).with("0.0.0.0", closed_port, any_args).and_raise(Errno::EALREADY)
+    expect(subject.is_port_open?("0.0.0.0", closed_port)).to be(false)
   end
 end

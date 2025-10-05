@@ -1,5 +1,9 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "base64"
 require "tmpdir"
+
 require_relative "subprocess"
 require_relative "which"
 
@@ -14,29 +18,76 @@ module Vagrant
       MINIMUM_REQUIRED_VERSION = 3
       # Number of seconds to wait while attempting to get powershell version
       DEFAULT_VERSION_DETECTION_TIMEOUT = 30
+      # Names of the powershell executable
+      POWERSHELL_NAMES = ["pwsh", "powershell"].map(&:freeze).freeze
+      # Paths to powershell executable
+      POWERSHELL_PATHS = [
+        "%SYSTEMROOT%/System32/WindowsPowerShell/v1.0",
+        "%WINDIR%/System32/WindowsPowerShell/v1.0",
+        "%PROGRAMFILES%/PowerShell/7",
+        "%PROGRAMFILES%/PowerShell/6"
+      ].map(&:freeze).freeze
+
       LOGGER = Log4r::Logger.new("vagrant::util::powershell")
 
       # @return [String|nil] a powershell executable, depending on environment
       def self.executable
         if !defined?(@_powershell_executable)
-          @_powershell_executable = "powershell"
+          prefer_name = ENV["VAGRANT_PREFERRED_POWERSHELL"].to_s.sub(".exe", "")
+          if !POWERSHELL_NAMES.include?(prefer_name)
+            prefer_name = POWERSHELL_NAMES.first
+          end
 
-          if Which.which(@_powershell_executable).nil?
-            # Try to use WSL interoperability if PowerShell is not symlinked to
-            # the container.
-            if Platform.wsl?
-              @_powershell_executable += ".exe"
+          LOGGER.debug("preferred powershell executable name: #{prefer_name}")
 
-              if Which.which(@_powershell_executable).nil?
-                @_powershell_executable = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
+          # First start with detecting executable on configured path
+          found_shells = Hash.new.tap do |found|
+            POWERSHELL_NAMES.each do |psh|
+              psh_path = Which.which(psh)
+              psh_path = Which.which(psh + ".exe") if !psh_path
+              next if !psh_path
 
-                if Which.which(@_powershell_executable).nil?
-                  @_powershell_executable = nil
+              LOGGER.debug("detected powershell for #{psh.inspect} - #{psh_path}")
+              found[psh] = psh_path
+            end
+          end
+
+          # Done if preferred shell was found
+          if found_shells.key?(prefer_name)
+            LOGGER.debug("using preferred powershell #{prefer_name.inspect} - #{found_shells[prefer_name]}")
+            return @_powershell_executable = found_shells[prefer_name]
+          end
+
+          # Now attempt with paths
+          paths = POWERSHELL_PATHS.map do |ppath|
+            result = Util::Subprocess.execute("cmd.exe", "/c", "echo #{ppath}")
+            result.stdout.gsub("\"", "").strip if result.exit_code == 0
+          end.compact
+
+          paths.each do |psh_path|
+            POWERSHELL_NAMES.each do |psh|
+              next if found_shells.key?(psh)
+
+              path = File.join(psh_path, psh)
+              [path, "#{path}.exe", path.sub(/^([A-Za-z]):/, "/mnt/\\1")].each do |full_path|
+                if File.executable?(full_path)
+                  found_shells[psh] = full_path
+                  break
                 end
               end
-            else
-              @_powershell_executable = nil
             end
+          end
+
+          # Done if preferred shell was found
+          if found_shells.key?(prefer_name)
+            LOGGER.debug("using preferred powershell #{prefer_name.inspect} - #{found_shells[prefer_name]}")
+            return @_powershell_executable = found_shells[prefer_name]
+          end
+
+          # Iterate names and return first found
+          POWERSHELL_NAMES.each do |psh|
+            LOGGER.debug("using powershell #{prefer_name.inspect} - #{found_shells[prefer_name]}")
+            return @_powershell_executable = found_shells[psh] if found_shells.key?(psh)
           end
         end
         @_powershell_executable
@@ -73,6 +124,7 @@ module Vagrant
             "-NoProfile",
             "-NonInteractive",
             "-ExecutionPolicy", "Bypass",
+            "-Command",
             "#{env}&('#{path}')",
             args
           ].flatten

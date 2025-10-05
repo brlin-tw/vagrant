@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require_relative "../../../../base"
 
 describe "VagrantPlugins::GuestSUSE::Cap::ChangeHostName" do
@@ -15,6 +18,7 @@ describe "VagrantPlugins::GuestSUSE::Cap::ChangeHostName" do
 
   before do
     allow(machine).to receive(:communicate).and_return(comm)
+    allow(cap).to receive(:hostnamectl?).and_return(true)
   end
 
   after do
@@ -45,6 +49,20 @@ describe "VagrantPlugins::GuestSUSE::Cap::ChangeHostName" do
         cap.change_host_name(machine, name)
         expect(comm.received_commands.size).to eq(3)
       end
+
+      context "hostnamectl is not present" do 
+        before do
+          allow(cap).to receive(:hostnamectl?).and_return(false)
+        end
+  
+        it "sets the hostname" do
+          comm.stub_command("hostname -f | grep '^#{name}$'", exit_code: 1)
+  
+          cap.change_host_name(machine, name)
+          expect(comm.received_commands[2]).to match(/echo #{name} > \/etc\/HOSTNAME/)
+          expect(comm.received_commands[2]).to match(/hostname '#{basename}'/)
+        end
+    end
     end
   end
 end

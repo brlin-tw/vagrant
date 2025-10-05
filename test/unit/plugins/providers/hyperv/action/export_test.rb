@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require_relative "../../../../base"
 
 require Vagrant.source_root.join("plugins/providers/hyperv/action/export")
@@ -5,7 +8,7 @@ require Vagrant.source_root.join("plugins/providers/hyperv/action/export")
 describe VagrantPlugins::HyperV::Action::Export do
   let(:app){ double("app") }
   let(:env){ {ui: ui, machine: machine} }
-  let(:ui){ double("ui") }
+  let(:ui){ Vagrant::UI::Silent.new }
   let(:provider){ double("provider", driver: driver) }
   let(:driver){ double("driver") }
   let(:machine){ double("machine", provider: provider, state: state) }
@@ -16,9 +19,6 @@ describe VagrantPlugins::HyperV::Action::Export do
 
   before do
     allow(app).to receive(:call)
-    allow(ui).to receive(:info)
-    allow(ui).to receive(:clear_line)
-    allow(ui).to receive(:report_progress)
     allow(driver).to receive(:export)
   end
 

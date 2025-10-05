@@ -1,8 +1,11 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require File.expand_path("../../../../base", __FILE__)
 
 describe Vagrant::Action::Builtin::Confirm do
   let(:app) { lambda { |env| } }
-  let(:env) { { ui: double("ui") } }
+  let(:env) { { ui: Vagrant::UI::Silent.new } }
   let(:message) { "foo" }
 
   ["y", "Y"].each do |valid|

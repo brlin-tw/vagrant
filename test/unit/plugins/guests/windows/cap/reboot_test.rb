@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require_relative "../../../../base"
 
 require Vagrant.source_root.join("plugins/guests/windows/cap/reboot")
@@ -11,7 +14,7 @@ describe "VagrantPlugins::GuestWindows::Cap::Reboot" do
   let(:machine) { double("machine", ui: ui) }
   let(:guest) { double("guest") }
   let(:communicator) { double("communicator") }
-  let(:ui) { double("ui") }
+  let(:ui) { Vagrant::UI::Silent.new }
 
   before do
     allow(machine).to receive(:communicate).and_return(communicator)
@@ -19,7 +22,6 @@ describe "VagrantPlugins::GuestWindows::Cap::Reboot" do
     allow(machine.guest).to receive(:ready?).and_return(true)
     allow(machine).to receive(:config).and_return(config)
     allow(config).to receive(:vm).and_return(vm)
-    allow(ui).to receive(:info)
   end
 
   describe ".reboot" do
@@ -47,7 +49,7 @@ describe "VagrantPlugins::GuestWindows::Cap::Reboot" do
 
       it "sends message to user that guest is rebooting" do
         expect(communicator).to receive(:test).and_return(true)
-        expect(ui).to receive(:info)
+        expect(ui).to receive(:info).and_call_original
       end
     end
 
@@ -109,6 +111,39 @@ describe "VagrantPlugins::GuestWindows::Cap::Reboot" do
         expect(communicator).to receive(:execute).with(/# Function/, { error_check: false, shell: :powershell }).and_return(0)
         expect(communicator).to receive(:execute).with('net use', { error_check: false, shell: :powershell })
         described_class.wait_for_reboot(machine)
+      end
+    end
+  end
+
+  context "reboot configuration" do
+    before do
+      allow(communicator).to receive(:execute)
+      expect(communicator).to receive(:test).with(/# Function/, { error_check: false, shell: :powershell }).and_return(0)
+      expect(communicator).to receive(:execute).with(/shutdown/, { shell: :powershell }).and_return(0)
+      allow(described_class).to receive(:sleep)
+      allow(described_class).to receive(:wait_for_reboot).and_raise(StandardError)
+    end
+
+    context "default retry duration value" do
+      let(:max_retries) { (described_class::DEFAULT_MAX_REBOOT_RETRY_DURATION / described_class::WAIT_SLEEP_TIME) + 2 }
+
+      it "should receive expected number of wait_for_reboot calls" do
+        expect(described_class).to receive(:wait_for_reboot).exactly(max_retries).times
+        expect { described_class.reboot(machine) }.to raise_error(StandardError)
+      end
+    end
+
+    context "with custom retry duration value" do
+      let(:duration) { 10 }
+      let(:max_retries) { (duration / described_class::WAIT_SLEEP_TIME) + 2 }
+
+      before do
+        expect(ENV).to receive(:fetch).with("VAGRANT_MAX_REBOOT_RETRY_DURATION", anything).and_return(duration)
+      end
+
+      it "should receive expected number of wait_for_reboot calls" do
+        expect(described_class).to receive(:wait_for_reboot).exactly(max_retries).times
+        expect { described_class.reboot(machine) }.to raise_error(StandardError)
       end
     end
   end

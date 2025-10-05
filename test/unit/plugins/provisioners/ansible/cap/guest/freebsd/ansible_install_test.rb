@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require_relative "../../../../../../base"
 require_relative "../shared/pip_ansible_install_examples"
 
@@ -31,7 +34,7 @@ describe VagrantPlugins::Ansible::Cap::Guest::FreeBSD::AnsibleInstall do
 
     describe "when install_mode is :default (or unknown)" do
       it "installs ansible with 'pkg' package manager" do
-        expect(communicator).to receive(:sudo).with("pkg install -qy py36-ansible")
+        expect(communicator).to receive(:sudo).with("pkg install -qy py37-ansible")
 
         subject.ansible_install(machine, :default, "", "", "")
       end

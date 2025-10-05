@@ -1,8 +1,11 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require File.expand_path("../../../../base", __FILE__)
 
 describe Vagrant::Action::Builtin::GracefulHalt do
   let(:app) { lambda { |env| } }
-  let(:env) { { machine: machine, ui: ui } }
+  let(:env) { { machine: machine, ui: Vagrant::UI::Silent.new } }
   let(:machine) do
     result = double("machine")
     allow(result).to receive(:config).and_return(machine_config)

@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "log4r"
 
 module VagrantPlugins
@@ -23,7 +26,8 @@ module VagrantPlugins
       rescue Vagrant::Errors::VirtualBoxInvalidVersion,
              Vagrant::Errors::VirtualBoxNotDetected,
              Vagrant::Errors::VirtualBoxKernelModuleNotLoaded,
-             Vagrant::Errors::VirtualBoxInstallIncomplete
+             Vagrant::Errors::VirtualBoxInstallIncomplete,
+             Vagrant::Errors::VBoxManageNotFoundError
         raise if raise_error
         return false
       end

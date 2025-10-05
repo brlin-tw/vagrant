@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require_relative "../../../../base"
 
 require Vagrant.source_root.join("plugins/guests/windows/cap/rsync")
@@ -19,7 +22,7 @@ describe "VagrantPlugins::GuestWindows::Cap::RSync" do
 
   describe ".rsync_pre" do
     it 'makes the guestpath directory with mkdir' do
-      communicator.expect_command("mkdir -p '/sync_dir'")
+      communicator.expect_command("mkdir \"/sync_dir\" -force")
       described_class.rsync_pre(machine, guestpath: '/sync_dir')
     end
   end

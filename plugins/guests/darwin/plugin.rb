@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "vagrant"
 
 module VagrantPlugins
@@ -29,6 +32,16 @@ module VagrantPlugins
       guest_capability(:darwin, :configure_networks) do
         require_relative "cap/configure_networks"
         Cap::ConfigureNetworks
+      end
+
+      guest_capability(:darwin, :darwin_version) do
+        require_relative "cap/darwin_version"
+        Cap::DarwinVersion
+      end
+
+      guest_capability(:darwin, :darwin_major_version) do
+        require_relative "cap/darwin_version"
+        Cap::DarwinVersion
       end
 
       guest_capability(:darwin, :halt) do

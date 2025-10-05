@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require "digest/sha1"
 require "log4r"
 require "pathname"
@@ -6,6 +9,7 @@ require "uri"
 require "vagrant/box_metadata"
 require "vagrant/util/downloader"
 require "vagrant/util/file_checksum"
+require "vagrant/util/file_mutex"
 require "vagrant/util/platform"
 
 module Vagrant
@@ -64,17 +68,29 @@ module Vagrant
           # If we received a shorthand URL ("mitchellh/precise64"),
           # then expand it properly.
           expanded = false
-          url.each_index do |i|
-            next if url[i] !~ /^[^\/]+\/[^\/]+$/
+          # Mark if only a single url entry was provided
+          single_entry = url.size == 1
 
-            if !File.file?(url[i])
+          url = url.map do |url_entry|
+            if url_entry =~ /^[^\/]+\/[^\/]+$/ && !File.file?(url_entry)
               server = Vagrant.server_url env[:box_server_url]
               raise Errors::BoxServerNotSet if !server
 
               expanded = true
-              url[i] = "#{server}/#{url[i]}"
+              # If only a single entry, expand to both the API endpoint and
+              # the direct shorthand endpoint.
+              if single_entry
+                url_entry = [
+                  "#{server}/api/v2/vagrant/#{url_entry}",
+                  "#{server}/#{url_entry}"
+                ]
+              else
+                url_entry = "#{server}/#{url_entry}"
+              end
             end
-          end
+
+            url_entry
+          end.flatten
 
           # Call the hook to transform URLs into authenticated URLs.
           # In the case we don't have a plugin that does this, then it
@@ -95,6 +111,21 @@ module Vagrant
             end
           end
 
+          # If only a single entry was provided, and it was expanded,
+          # inspect the metadata check results and extract the one that
+          # was successful, with preference to the API endpoint
+          if single_entry && expanded
+            idx = is_metadata_results.index { |v| v === true }
+            # If none of the urls were successful, set the index
+            # as the last entry
+            idx = is_metadata_results.size - 1 if idx.nil?
+
+            # Now reset collections with single value
+            is_metadata_results = [is_metadata_results[idx]]
+            authed_urls = [authed_urls[idx]]
+            url = [url[idx]]
+          end
+
           if expanded && url.length == 1
             is_error = is_metadata_results.find do |b|
               b.is_a?(Errors::DownloaderError)
@@ -108,6 +139,14 @@ module Vagrant
             end
           end
 
+          is_error = is_metadata_results.find do |b|
+            b.is_a?(Errors::DownloaderError)
+          end
+          if is_error
+            raise Errors::BoxMetadataDownloadError,  
+              message: is_error.extra_data[:message]
+          end
+
           is_metadata = is_metadata_results.any? { |b| b === true }
           if is_metadata && url.length > 1
             raise Errors::BoxAddMetadataMultiURL,
@@ -118,7 +157,7 @@ module Vagrant
             url = [url.first, authed_urls.first]
             add_from_metadata(url, env, expanded)
           else
-            add_direct(url, env)
+            add_direct(authed_urls, env)
           end
 
           @app.call(env)
@@ -153,6 +192,7 @@ module Vagrant
             env,
             checksum: env[:box_checksum],
             checksum_type: env[:box_checksum_type],
+            architecture: env[:box_architecture]
           )
         end
 
@@ -167,6 +207,9 @@ module Vagrant
         #   a Atlas server URL.
         def add_from_metadata(url, env, expanded)
           original_url = env[:box_url]
+          architecture = env[:box_architecture]
+          display_architecture = architecture == :auto ?
+                                   Util::Platform.architecture : architecture
           provider = env[:box_provider]
           provider = Array(provider) if provider
           version = env[:box_version]
@@ -197,7 +240,7 @@ module Vagrant
             return if @download_interrupted
 
             File.open(metadata_path) do |f|
-              metadata = BoxMetadata.new(f)
+              metadata = BoxMetadata.new(f, url: authenticated_url)
             end
           rescue Errors::DownloaderError => e
             raise if !expanded
@@ -216,19 +259,68 @@ module Vagrant
           end
 
           metadata_version  = metadata.version(
-            version || ">= 0", provider: provider)
+            version || ">= 0",
+            provider: provider,
+            architecture: architecture,
+          )
+
           if !metadata_version
-            if provider && !metadata.version(">= 0", provider: provider)
-              raise Errors::BoxAddNoMatchingProvider,
+            if provider
+              # If no version found that supports the provider, then the
+              # box has no support for the provider
+              if !metadata.version(">= 0", provider: provider)
+                raise Errors::BoxAddNoMatchingProvider,
+                  name: metadata.name,
+                  requested: Array(provider).join(", "),
+                  url: display_url
+              end
+
+              # Get all versions that support the provider and architecture
+              available_versions = metadata.versions(
+                provider: provider,
+                architecture: architecture
+              )
+
+              # If no versions are found, then the box does not provide
+              # support for the requested architecture using the requested
+              # architecture
+              if available_versions.empty?
+                supported_providers = metadata.versions(architecture: architecture).map do |v|
+                  metadata.version(v).providers(architecture)
+                end.compact.uniq.sort
+
+                # If no providers are found, then the box does not
+                # have any support for the requested architecture
+                if supported_providers.empty?
+                  raise Errors::BoxAddNoArchitectureSupport,
+                    architecture: display_architecture,
+                    name: metadata.name,
+                    url: display_url
+                end
+
+                raise Errors::BoxAddNoMatchingArchitecture,
+                  provider: Array(provider).join(", "),
+                  architecture: display_architecture,
+                  name: metadata.name,
+                  url: display_url,
+                  supported_providers: supported_providers
+              end
+
+              raise Errors::BoxAddNoMatchingProviderVersion,
+                constraints: version || ">= 0",
+                provider: Array(provider).join(", "),
+                architecture: display_architecture,
                 name: metadata.name,
-                requested: provider,
-                url: display_url
+                url: display_url,
+                versions: available_versions.reverse.join(", ")
             else
+              # Report that no version can match the constraints requested
+              # but show what versions are supported
               raise Errors::BoxAddNoMatchingVersion,
                 constraints: version || ">= 0",
                 name: metadata.name,
                 url: display_url,
-                versions: metadata.versions.join(", ")
+                versions: metadata.versions(architecture: architecture).reverse.join(", ")
             end
           end
 
@@ -237,16 +329,16 @@ module Vagrant
             # If a provider was specified, make sure we get that specific
             # version.
             provider.each do |p|
-              metadata_provider = metadata_version.provider(p)
+              metadata_provider = metadata_version.provider(p, architecture)
               break if metadata_provider
             end
-          elsif metadata_version.providers.length == 1
+          elsif metadata_version.providers(architecture).length == 1
             # If we have only one provider in the metadata, just use that
             # provider.
             metadata_provider = metadata_version.provider(
-              metadata_version.providers.first)
+              metadata_version.providers(architecture).first, architecture)
           else
-            providers = metadata_version.providers.sort
+            providers = metadata_version.providers(architecture).sort
 
             choice = 0
             options = providers.map do |p|
@@ -267,7 +359,7 @@ module Vagrant
             end
 
             metadata_provider = metadata_version.provider(
-              providers[choice-1])
+              providers[choice-1], architecture)
           end
 
           provider_url = metadata_provider.url
@@ -281,6 +373,17 @@ module Vagrant
             provider_url = authed_urls[0]
           end
 
+          # The architecture name used when adding the box should be
+          # the value extracted from the metadata provider
+          arch_name = metadata_provider.architecture
+
+          # In the special case where the architecture name is "unknown" and
+          # it is listed as the default architecture, unset the architecture
+          # name so it is installed without architecture information
+          if arch_name == "unknown" && metadata_provider.default_architecture
+            arch_name = nil
+          end
+
           box_add(
             [[provider_url, metadata_provider.url]],
             metadata.name,
@@ -290,6 +393,7 @@ module Vagrant
             env,
             checksum: metadata_provider.checksum,
             checksum_type: metadata_provider.checksum_type,
+            architecture: arch_name,
           )
         end
 
@@ -305,16 +409,21 @@ module Vagrant
         # @param [Hash] env
         # @return [Box]
         def box_add(urls, name, version, provider, md_url, env, **opts)
+          display_architecture = opts[:architecture] == :auto ?
+                                   Util::Platform.architecture : opts[:architecture]
           env[:ui].output(I18n.t(
             "vagrant.box_add_with_version",
             name: name,
             version: version,
-            providers: Array(provider).join(", ")))
+            providers: [
+              provider,
+              display_architecture ? "(#{display_architecture})" : nil
+            ].compact.join(" ")))
 
           # Verify the box we're adding doesn't already exist
           if provider && !env[:box_force]
             box = env[:box_collection].find(
-              name, provider, version)
+              name, provider, version, opts[:architecture])
             if box
               raise Errors::BoxAlreadyExists,
                 name: name,
@@ -365,7 +474,9 @@ module Vagrant
               box_url, name, version,
               force: env[:box_force],
               metadata_url: md_url,
-              providers: provider)
+              providers: provider,
+              architecture: opts[:architecture]
+            )
           ensure
             # Make sure we delete the temporary file after we add it,
             # unless we were interrupted, in which case we keep it around
@@ -384,7 +495,10 @@ module Vagrant
             "vagrant.box_added",
             name: box.name,
             version: box.version,
-            provider: box.provider))
+            provider: [
+              provider,
+              display_architecture ? "(#{display_architecture})" : nil
+            ].compact.join(" ")))
 
           # Store the added box in the env for future middleware
           env[:box_added] = box
@@ -434,6 +548,7 @@ module Vagrant
           downloader_options[:headers] = ["Accept: application/json"] if opts[:json]
           downloader_options[:ui] = env[:ui] if opts[:ui]
           downloader_options[:location_trusted] = env[:box_download_location_trusted]
+          downloader_options[:disable_ssl_revoke_best_effort] = env[:box_download_disable_ssl_revoke_best_effort]
           downloader_options[:box_extra_download_options] = env[:box_extra_download_options]
 
           d = Util::Downloader.new(url, temp_path, downloader_options)
@@ -471,12 +586,21 @@ module Vagrant
           end
 
           begin
-            d.download!
-          rescue Errors::DownloaderInterrupted
-            # The downloader was interrupted, so just return, because that
-            # means we were interrupted as well.
-            @download_interrupted = true
-            env[:ui].info(I18n.t("vagrant.actions.box.download.interrupted"))
+            mutex_path = d.destination + ".lock"
+            Util::FileMutex.new(mutex_path).with_lock do
+              begin
+                d.download!
+              rescue Errors::DownloaderInterrupted
+                # The downloader was interrupted, so just return, because that
+                # means we were interrupted as well.
+                @download_interrupted = true
+                env[:ui].info(I18n.t("vagrant.actions.box.download.interrupted"))
+              end
+            end
+          rescue Errors::VagrantLocked
+            raise Errors::DownloadAlreadyInProgress,
+              dest_path: d.destination,
+              lock_file_path: mutex_path
           end
 
           Pathname.new(d.destination)
@@ -510,7 +634,7 @@ module Vagrant
                   return false
                 end
 
-                BoxMetadata.new(f)
+                BoxMetadata.new(f, url: url)
               end
               return true
             rescue Errors::BoxMetadataMalformed
@@ -538,11 +662,13 @@ module Vagrant
           !!(match.last.chomp =~ /application\/json/)
         end
 
-        def validate_checksum(checksum_type, checksum, path)
+        def validate_checksum(checksum_type, _checksum, path)
+          checksum = _checksum.strip()
           @logger.info("Validating checksum with #{checksum_type}")
           @logger.info("Expected checksum: #{checksum}")
 
-          actual = FileChecksum.new(path, checksum_type).checksum
+          _actual = FileChecksum.new(path, checksum_type).checksum
+          actual = _actual.strip()
           @logger.info("Actual checksum: #{actual}")
           if actual.casecmp(checksum) != 0
             raise Errors::BoxChecksumMismatch,

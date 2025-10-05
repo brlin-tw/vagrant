@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: BUSL-1.1
+
 require File.expand_path("../../../../../base", __FILE__)
 
 require Vagrant.source_root.join("plugins/commands/snapshot/command/list")
@@ -52,8 +55,8 @@ describe VagrantPlugins::CommandSnapshot::Command::List do
       it "prints a message if the vm does not exist" do
         machine.id = nil
 
-        expect(iso_env.ui).to receive(:info).with("==> default: VM not created. Moving on...", anything)
-          .and_return({})
+        expect(iso_env.ui).to receive(:info).with("==> default: VM not created. Moving on...", anything).
+          and_call_original
         expect(machine).to_not receive(:action)
         expect(subject.execute).to eq(0)
       end
@@ -61,7 +64,7 @@ describe VagrantPlugins::CommandSnapshot::Command::List do
       it "prints a message if no snapshots have been taken" do
         machine.id = "foo"
 
-        expect(iso_env.ui).to receive(:output)
+        expect(iso_env.ui).to receive(:output).and_call_original
           .with(/No snapshots have been taken yet!/, anything)
         expect(subject.execute).to eq(0)
       end
@@ -72,9 +75,9 @@ describe VagrantPlugins::CommandSnapshot::Command::List do
         allow(machine.provider).to receive(:capability).with(:snapshot_list).
           and_return(["foo", "bar", "baz"])
 
-        expect(iso_env.ui).to receive(:output).with(/default/, anything)
-        expect(iso_env.ui).to receive(:detail).with(/foo/, anything)
-        expect(iso_env.ui).to receive(:detail).with(/bar/, anything)
+        expect(iso_env.ui).to receive(:output).with(/default/, anything).and_call_original
+        expect(iso_env.ui).to receive(:detail).with(/foo/, anything).and_call_original
+        expect(iso_env.ui).to receive(:detail).with(/bar/, anything).and_call_original
         expect(iso_env.ui).to receive(:detail).with(/baz/, anything)
         expect(subject.execute).to eq(0)
       end
